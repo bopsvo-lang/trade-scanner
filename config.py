@@ -14,7 +14,7 @@ PUMP_CHAT_ID = os.getenv('PUMP_CHAT_ID', '')                   # Памп-сиг
 STATS_CHAT_ID = os.getenv('STATS_CHAT_ID', '')                 # Статистика
 ACCUMULATION_CHAT_ID = os.getenv('ACCUMULATION_CHAT_ID', '')   # Накопление
 
-UPDATE_INTERVAL = int(os.getenv('UPDATE_INTERVAL', 900))       # 15 минут для основного анализа
+UPDATE_INTERVAL = int(os.getenv('UPDATE_INTERVAL', 300))       # 15 минут для основного анализа
 PUMP_SCAN_INTERVAL = int(os.getenv('PUMP_SCAN_INTERVAL', 30))  # 30 секунд для памп-сканера
 MIN_CONFIDENCE = int(os.getenv('MIN_CONFIDENCE', 55))
 TIMEFRAME = os.getenv('TIMEFRAME', '15m')
@@ -64,9 +64,9 @@ PROXY_SETTINGS = {
 
 PUMP_SCAN_SETTINGS = {
     'enabled': True,
-    'threshold': 7.0,                               # Порог % движения для REST API (было 3.5, 2.0) 3.0
-    'instant_threshold': 7.0,                       # Порог % движения для WebSocket (мейджоры) (было 2.0, 1.2) 2.5
-    'shitcoin_instant_threshold': 7.0,              # Порог % движения для WebSocket (щиткоины) (было 1.5, 0.8) 2.0
+    'threshold': 3.0,                               # Порог % движения для REST API (было 3.5, 2.0) 3.0
+    'instant_threshold': 3.0,                       # Порог % движения для WebSocket (мейджоры) (было 2.0, 1.2) 2.5
+    'shitcoin_instant_threshold': 4.0,              # Порог % движения для WebSocket (щиткоины) (было 1.5, 0.8) 2.0
     'timeframes': ['1m', '3m', '5m', '15m', '30m'], # Было ['1m', '3m', '5m']
     'min_volume_usdt': 1000,                        # Включает монеты с объемом от 1000 USDT (очень низкий порог → почти все монеты)
     'max_pairs_to_scan': 600,                       # Было 600
@@ -116,29 +116,29 @@ WEBSOCKET_ANALYSIS_SETTINGS = {
     'enabled': True,
     
     # Окна анализа (в секундах)
-    'time_windows': [3, 5, 10, 15, 20, 30, 45, 60],  # проверяем рост за 3с, 5с, 10с, 30с, 60с
-    
+    'time_windows': [3, 5, 10, 15, 20, 30, 45, 60],
+
     # Пороги для разных типов монет
     'thresholds': {
         'major': {
-            '3s': 3.0,    # 3% за 3 секунды
-            '5s': 5.0,    # 5% за 5 секунд
-            '10s': 7.0,   # 7% за 10 секунд
-            '15s': 8.0,   # 8% за 30 секунд
-            '20s': 9.0,   # 9% за 60 секунд
-            '30s': 10.0,
-            '45s': 8.0,
-            '60s': 7.0,
+            '3s': 1.0,    # 1% за 3 секунды
+            '5s': 1.5,    # 1.5% за 5 секунд
+            '10s': 2.0,   # 2% за 10 секунд
+            '15s': 2.5,   # 2.5% за 15 секунд
+            '20s': 3.0,   # 3% за 20 секунд
+            '30s': 3.0,   # 3% за 30 секунд (было 10%)
+            '45s': 3.5,   # 3.5% за 45 секунд
+            '60s': 4.0,   # 4% за 60 секунд (было 7%)
         },
         'shitcoin': {
-            '3s': 2.0,    # 0.8% за 3 секунды
-            '5s': 4.0,    # 1% за 5 секунд
-            '10s': 6.0,   # 1.5% за 10 секунд
-            '15s': 8.0,   # 2% за 30 секунд
-            '20s': 8.0,   # 2.5% за 60 секунд
-            '30s': 8.0,
-            '45s': 7.0,
-            '60s': 7.0,
+            '3s': 0.8,    # 0.8% за 3 секунды
+            '5s': 1.0,    # 1% за 5 секунд
+            '10s': 1.5,   # 1.5% за 10 секунд
+            '15s': 2.0,   # 2% за 15 секунд
+            '20s': 2.5,   # 2.5% за 20 секунд
+            '30s': 2.5,   # 2.5% за 30 секунд (было 8%)
+            '45s': 3.0,   # 3% за 45 секунд
+            '60s': 3.5,   # 3.5% за 60 секунд (было 7%)
         }
     },
     
@@ -1156,7 +1156,7 @@ LIQUIDITY_ZONES_SETTINGS = {
 STRATEGY_SETTINGS = {
     # Активная стратегия (по умолчанию)
     'active': {
-        'enabled': True,
+        'enabled': False,
         'name': 'Активная',
         
         # FVG настройки
@@ -1177,7 +1177,7 @@ STRATEGY_SETTINGS = {
     
     # Консервативная стратегия
     'conservative': {
-        'enabled': False,
+        'enabled': True,
         'name': 'Консервативная',
         
         'fvg': {
@@ -1214,7 +1214,7 @@ STRATEGY_SETTINGS = {
     },
     
     # Выбранная стратегия
-    'selected': 'active',  # active, conservative, aggressive
+    'selected': 'conservative',  # active, conservative, aggressive
 }
 
 # Типы стратегий. Как понять, что лучше:
