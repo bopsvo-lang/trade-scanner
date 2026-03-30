@@ -35,7 +35,12 @@ class BingXWebSocketManager:
         logger.info("✅ BingX WebSocket Manager инициализирован")
     
     async def connect_ticker_stream(self, symbols: List[str], callback: Callable):
-        stream_name = f"ticker_{len(symbols)}"
+        # Показываем первые 5 символов для информации
+        preview = ', '.join(symbols[:5])
+        if len(symbols) > 5:
+            preview += f" и еще {len(symbols)-5}"
+        
+        stream_name = f"ticker_{preview}"
         
         subscribe_msg = {
             "id": random.randint(1, 10000),
@@ -44,7 +49,7 @@ class BingXWebSocketManager:
         }
         
         asyncio.create_task(self._run_websocket(stream_name, subscribe_msg, symbols, callback))
-        logger.info(f"✅ WebSocket подключен для {len(symbols)} символов")
+        logger.info(f"✅ WebSocket подключен для {len(symbols)} символов: {preview}")
     
     async def _run_websocket(self, stream_name: str, subscribe_msg: Dict, symbols: List[str], callback: Callable):
         attempts = 0
