@@ -4126,7 +4126,9 @@ class MultiTimeframeAnalyzer:
         prev = df.iloc[-2] if len(df) > 1 else last
         
         logger.info(f"  📊 {symbol} - Цена: {last['close']}, RSI: {last['rsi'] if pd.notna(last['rsi']) else 'N/A'}")
-        
+        # Переменные для отслеживания пробоя
+        breakout_confirmed = False
+
         # Загружаем стратегию
         from config import STRATEGY_SETTINGS
         strategy_name = STRATEGY_SETTINGS['selected']
@@ -4360,6 +4362,7 @@ class MultiTimeframeAnalyzer:
                     reasons.append(f"✅ {confirmed['message']}")
                     confidence += 30
                     signal_type = 'confirmed_breakout'
+                    breakout_confirmed = True  # ← ДОБАВИТЬ ЭТУ СТРОКУ
                     
                     # Определяем направление
                     if confirmed['direction'] == 'вверх':
@@ -4369,6 +4372,13 @@ class MultiTimeframeAnalyzer:
                     
                     logger.info(f"  ✅ {symbol} - Подтвержденный пробой! +30 confidence")
                     break  # берем первый подтвержденный пробой
+
+        # ===== ПРОВЕРКА СТРАТЕГИИ: ТРЕБОВАНИЕ ПРОБОЯ =====
+        if strategy['require_breakout_confirmation']:
+            if not breakout_confirmed:
+                reasons.append(f"⏳ {strategy['name']} стратегия: ждем ПРОБОЯ уровня")
+                direction = 'NEUTRAL'
+                logger.info(f"  ⏳ {symbol} - Сигнал отменен: требуется подтверждение пробоя")
 
         # ===== АНАЛИЗ КОНВЕРГЕНЦИИ УРОВНЕЙ =====
         if FEATURES['advanced']['patterns']:
@@ -4495,7 +4505,7 @@ class MultiTimeframeAnalyzer:
                                 logger.warning(f"⚠️ signal не является словарем, тип: {type(signal)}")
                         logger.info(f"  🎯 {symbol} - Найдена снайперская точка входа: {sniper['type']} по {sniper['entry_price']:.4f}")
 
-         # ===== АНАЛИЗ НАКОПЛЕНИЯ ПОСЛЕ ПРОБОЯ =====
+        # ===== АНАЛИЗ НАКОПЛЕНИЯ ПОСЛЕ ПРОБОЯ =====
                 if breakout_level and (last['close'] > breakout_level * 0.99 and last['close'] < breakout_level * 1.01):
                     # Цена тестирует уровень после пробоя
                     if last['volume_ratio'] > 1.5:
@@ -4514,17 +4524,35 @@ class MultiTimeframeAnalyzer:
                 logger.info(f"  🔍 {symbol} - Анализ FVG на всех таймфреймах")
                 fvg_analysis = self.analyze_fvg_multi_timeframe(dataframes, last['close'])
                 logger.info(f"  📊 FVG анализ вернул: has_fvg={fvg_analysis.get('has_fvg', False)}, zones={len(fvg_analysis.get('zones', []))}")
+                
                 if fvg_analysis['has_fvg']:
                     for signal_text in fvg_analysis['signals']:
                         reasons.append(signal_text)
-                    confidence += fvg_analysis['strength'] / 5           
+                    confidence += fvg_analysis['strength'] / 5
                     logger.info(f"  ✅ {symbol} - Найдено FVG: {len(fvg_analysis['signals'])} на разных ТФ")
+                    
             except Exception as e:
                 logger.error(f"❌ Ошибка в FVG анализе для {symbol}: {e}")
                 import traceback
                 traceback.print_exc()
-                # Продолжаем выполнение с пустым fvg_analysis
                 fvg_analysis = {'has_fvg': False, 'signals': [], 'zones': []}
+
+        # ===== FVG ПО НАПРАВЛЕНИЮ =====
+        if strategy['fvg'].get('direction_filter', True):
+            if direction == 'LONG':
+                fvg_below = [z for z in fvg_analysis.get('zones', []) if z['max'] < last['close']]
+                if not fvg_below:
+                    reasons.append("⚠️ Нет FVG поддержки снизу (LONG)")
+                    confidence -= 10
+                else:
+                    logger.info(f"  ✅ Найдено {len(fvg_below)} FVG поддержки снизу")
+            elif direction == 'SHORT':
+                fvg_above = [z for z in fvg_analysis.get('zones', []) if z['min'] > last['close']]
+                if not fvg_above:
+                    reasons.append("⚠️ Нет FVG сопротивления сверху (SHORT)")
+                    confidence -= 10
+                else:
+                    logger.info(f"  ✅ Найдено {len(fvg_above)} FVG сопротивления сверху")
 
         # ===== ПРОВЕРКА СТРАТЕГИИ: ТРЕБОВАНИЕ ЗАКРЫТИЯ FVG =====
         require_close_pct = strategy['fvg'].get('require_close_pct', 0)
@@ -4619,7 +4647,7 @@ class MultiTimeframeAnalyzer:
                     # ✅ БОНУС ЗА КОНФЛЮЕНЦИЮ (ВЫНЕСЕН ИЗ ELSE)
                     level_count = potential_analysis.get('level_count', 0)
 
-                    # ✅ Проверка стратегии: минимальное количество уровней
+                    # ✅ Проверка стратегии: минимальное количество уровней в конфлюенции
                     if level_count < strategy['min_confluence_levels']:
                         reasons.append(f"⚠️ {strategy['name']} стратегия: требуется {strategy['min_confluence_levels']}+ уровней (есть {level_count})")
                         direction = 'NEUTRAL'
