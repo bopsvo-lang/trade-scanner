@@ -4359,8 +4359,9 @@ class MultiTimeframeAnalyzer:
                 )
                 
                 if confirmed:
+                    signal_type = 'breakout'  # ← добавить
                     reasons.append(f"✅ {confirmed['message']}")
-                    confidence += 30
+                    confidence += 25
                     signal_type = 'confirmed_breakout'
                     breakout_confirmed = True  # ← ДОБАВИТЬ ЭТУ СТРОКУ
                     
