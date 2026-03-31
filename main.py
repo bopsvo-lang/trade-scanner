@@ -4359,13 +4359,28 @@ class MultiTimeframeAnalyzer:
             
             from config import BREAKOUT_CONFIRMATION_SETTINGS
             
-            current_tf = TIMEFRAMES.get('current', '15m')
+            # ✅ Используем младший ТФ для подтверждения пробоя (5m)
+            confirmation_tf = '5m'
+            df_confirmation = None
+            current_tf_name = confirmation_tf
+            
+            # Пытаемся получить данные 5m
+            if confirmation_tf in dataframes and dataframes[confirmation_tf] is not None:
+                df_confirmation = dataframes[confirmation_tf]
+                logger.info(f"  📊 Использую {confirmation_tf} для подтверждения пробоя")
+            else:
+                # Если нет 5m — используем current (15m) как fallback
+                df_confirmation = df
+                current_tf_name = TIMEFRAMES.get('current', '15m')
+                logger.info(f"  ⚠️ Нет данных {confirmation_tf}, использую {current_tf_name} для подтверждения")
+            
             trend_analyzer = TrendLineAnalyzer()
+            # Уровни ищем на текущем ТФ (15m)
             trend_lines = trend_analyzer.find_trend_lines(df, touch_count=3)
             
             for line in trend_lines:
                 confirmed = self.breakout_tracker.check_breakout_confirmation(
-                    symbol, current_tf, df, line, last['close'],
+                    symbol, current_tf_name, df_confirmation, line, last['close'],
                     required_candles=BREAKOUT_CONFIRMATION_SETTINGS['required_candles'],
                     required_percent=BREAKOUT_CONFIRMATION_SETTINGS['required_percent'],
                     volume_confirmation=BREAKOUT_CONFIRMATION_SETTINGS['volume_confirmation'],
@@ -4373,11 +4388,10 @@ class MultiTimeframeAnalyzer:
                 )
                 
                 if confirmed:
-                    signal_type = 'breakout'  # ← добавить
                     reasons.append(f"✅ {confirmed['message']}")
-                    confidence += 25
+                    confidence += 30
                     signal_type = 'confirmed_breakout'
-                    breakout_confirmed = True  # ← ДОБАВИТЬ ЭТУ СТРОКУ
+                    breakout_confirmed = True
                     
                     # Определяем направление
                     if confirmed['direction'] == 'вверх':
@@ -4385,7 +4399,7 @@ class MultiTimeframeAnalyzer:
                     else:
                         direction = 'SHORT 📉 (подтвержденный пробой)'
                     
-                    logger.info(f"  ✅ {symbol} - Подтвержденный пробой! +30 confidence")
+                    logger.info(f"  ✅ {symbol} - Подтвержденный пробой на {current_tf_name}! +30 confidence")
                     break  # берем первый подтвержденный пробой
 
         # ===== ПРОВЕРКА СТРАТЕГИИ: ТРЕБОВАНИЕ ПРОБОЯ =====
@@ -6295,7 +6309,9 @@ class MultiExchangeScannerBot:
         self.divergence = DivergenceAnalyzer() if FEATURES['advanced']['divergence'] else None
         self.imbalance = ImbalanceAnalyzer(IMBALANCE_SETTINGS) if FEATURES['advanced']['imbalance'] else None
         self.liquidity = LiquidityAnalyzer(LIQUIDITY_SETTINGS) if FEATURES['advanced']['liquidity'] else None
-        
+        self.last_signal_time = {}  # {coin: datetime}
+        self.last_signal_direction = {}  # {coin: direction}
+
         # Инициализация дополнительных анализаторов
         if FEATURES['advanced']['fibonacci']:
             from config import FIBONACCI_SETTINGS
@@ -6801,11 +6817,27 @@ class MultiExchangeScannerBot:
             return
         
         coin = self.extract_coin(signal['symbol'])
+        current_time = datetime.now()
+        
+        # ЗАЩИТА ОТ ДУБЛИРОВАНИЯ
+        # ✅ Проверяем, не было ли сигнала по этой монете за последние 5 минут
+        if hasattr(self, 'last_signal_time'):
+            if coin in self.last_signal_time:
+                time_diff = (current_time - self.last_signal_time[coin]).total_seconds() / 60
+                if time_diff < 5:  # 5 минут кд
+                    last_dir = self.last_signal_direction.get(coin)
+                    if last_dir == signal['direction']:
+                        logger.info(f"⏭️ Пропускаю повторный сигнал {coin} ({signal['direction']}) через {time_diff:.1f} мин")
+                        return
+        else:
+            # Инициализируем словари, если еще не созданы
+            self.last_signal_time = {}
+            self.last_signal_direction = {}
         
         self.last_signals[coin] = {
             'symbol': signal['symbol'],
             'signal': signal,
-            'time': datetime.now()
+            'time': current_time
         }
         
         contract_info = None
@@ -6853,6 +6885,10 @@ class MultiExchangeScannerBot:
                     reply_markup=keyboard
                 )
                 logger.info(f"✅ Отправлен {signal_type} сигнал: {signal['symbol']}")
+            
+            # ✅ Сохраняем время и направление после успешной отправки
+            self.last_signal_time[coin] = current_time
+            self.last_signal_direction[coin] = signal['direction']
             
             if hasattr(self, 'stats'):
                 self.stats.add_signal(signal, signal_type)
