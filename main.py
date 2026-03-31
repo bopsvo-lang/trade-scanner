@@ -6060,6 +6060,11 @@ class FastPumpScanner:
         signal_power = self._get_power_text(abs(pump_change))
         signal['signal_power'] = signal_power
         
+        # Проверяем, есть ли ожидание пробоя
+        if any("ждем ПРОБОЯ" in r for r in signal.get('reasons', [])):
+            signal_emoji = "⏳" + signal_emoji
+            signal_text = f"{signal_text} (ждет пробоя)"
+
         line1 = f"{signal_emoji} <code>{coin}</code> {signal_text} {signal_power}"
         
         # Параметры контракта
@@ -6269,9 +6274,9 @@ class FastPumpScanner:
         elif strength >= 5.0:
             return "🔥 СРЕДНИЙ"
         elif strength >= 3.0:
-            return "📊 СРЕДНИЙ"
+            return "📊 СЛАБЫЙ"
         elif strength >= 1.5:
-            return "⚡ СЛАБЫЙ"
+            return "⚡ ОЧЕНЬ СЛАБЫЙ"
         else:
             return "👀 НАБЛЮДЕНИЕ"
 
