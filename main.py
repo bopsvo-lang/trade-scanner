@@ -4339,6 +4339,20 @@ class MultiTimeframeAnalyzer:
                         direction = 'SHORT 📉 (ловушка быков)'
                     logger.info(f"  ⚠️ {symbol} - Обнаружен потенциальный ложный пробой!")
         
+        # Проверяем приближение к трендовым линиям
+        approaching = trend_analyzer.check_approaching_trendline(
+            df, last['close'], touch_count=3, threshold=0.5
+        )
+
+        for warning in approaching:
+            reasons.append(warning['message'])
+            confidence += 10
+            
+            # ✅ Добавить предупреждение для консервативной стратегии
+            if strategy.get('require_breakout_confirmation', False):
+                level_type = "поддержки" if "поддержке" in warning['message'] else "сопротивления"
+                reasons.append(f"⏳ {strategy['name']} стратегия: ждем ПРОБОЯ наклонного уровня {level_type} на {current_tf}")
+        
         # ===== ПОДТВЕРЖДЕНИЕ ПРОБОЕВ =====
         if FEATURES['advanced']['patterns'] and BREAKOUT_CONFIRMATION_SETTINGS['enabled']:
             logger.info(f"  🔍 {symbol} - Проверка подтвержденных пробоев")
@@ -4377,7 +4391,20 @@ class MultiTimeframeAnalyzer:
         # ===== ПРОВЕРКА СТРАТЕГИИ: ТРЕБОВАНИЕ ПРОБОЯ =====
         if strategy['require_breakout_confirmation']:
             if not breakout_confirmed:
-                reasons.append(f"⏳ {strategy['name']} стратегия: ждем ПРОБОЯ уровня")
+                # Определяем тип уровня, если есть информация
+                level_type = "неизвестного типа"
+                tf_name = TIMEFRAMES.get('current', '15м')
+                
+                # Пытаемся определить из последних причин
+                for r in reversed(reasons):
+                    if "поддержк" in r or "сопротивл" in r:
+                        if "поддержк" in r:
+                            level_type = "ПОДДЕРЖКИ"
+                        else:
+                            level_type = "СОПРОТИВЛЕНИЯ"
+                        break
+                
+                reasons.append(f"⏳ {strategy['name']} стратегия: ждем ПРОБОЯ уровня {level_type} на {tf_name}")
                 direction = 'NEUTRAL'
                 logger.info(f"  ⏳ {symbol} - Сигнал отменен: требуется подтверждение пробоя")
 
