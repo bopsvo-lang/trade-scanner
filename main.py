@@ -2043,7 +2043,7 @@ class LevelCollector:
                     price=price,
                     strength=strength,
                     tf=tf,
-                    source=f"Локальный максимум ({tf})",
+                    source=f"локального максимума ({tf})",
                     touches=touches
                 )
                 level.min_price = price * 0.995
@@ -2066,7 +2066,7 @@ class LevelCollector:
                     price=price,
                     strength=strength,
                     tf=tf,
-                    source=f"Локальный минимум ({tf})",
+                    source=f"локального минимума ({tf})",
                     touches=touches
                 )
                 level.min_price = price * 0.995
@@ -2938,7 +2938,15 @@ class BaseExchangeFetcher:
         return []
     
     async def fetch_ohlcv(self, symbol: str, timeframe: str, limit: int = 200) -> Optional[pd.DataFrame]:
-        return None
+        try:
+            ohlcv = await self.exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
+            # ...
+        except Exception as e:
+            if "pause currently" in str(e) or "109415" in str(e):
+                logger.debug(f"⏭️ Пропускаю приостановленную пару {symbol}")
+                return None
+            logger.error(f"Ошибка BingX {symbol}: {e}")
+            return None
     
     async def fetch_funding_rate(self, symbol: str) -> Optional[float]:
         return 0.0
@@ -4518,6 +4526,7 @@ class MultiTimeframeAnalyzer:
                     break  # берем первый подтвержденный пробой
 
         # ===== ПРОВЕРКА СТРАТЕГИИ: ТРЕБОВАНИЕ ПРОБОЯ =====
+        logger.info(f"  🔍 {symbol} - Проверка стратегии: require_breakout_confirmation={strategy['require_breakout_confirmation']}, breakout_confirmed={breakout_confirmed}")
         if strategy['require_breakout_confirmation']:
             if not breakout_confirmed:
                 # Определяем тип уровня, если есть информация
@@ -6856,6 +6865,11 @@ class MultiExchangeScannerBot:
                         logger.info(f"  ⏭️ NEUTRAL сигнал пропущен")
                         continue
                     
+                    # ✅ Нормализуем уверенность (максимум 100)
+                    if signal['confidence'] > 100:
+                        signal['confidence'] = min(100, signal['confidence'])
+                        logger.info(f"  📊 Нормализована уверенность: {signal['confidence']:.1f}%")
+
                     if signal['confidence'] < MIN_CONFIDENCE:
                         logger.info(f"  ⏭️ Низкая уверенность: {signal['confidence']}% < {MIN_CONFIDENCE}%")
                         continue
