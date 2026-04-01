@@ -64,15 +64,15 @@ PROXY_SETTINGS = {
 
 PUMP_SCAN_SETTINGS = {
     'enabled': True,
-    'threshold': 3.0,                               # Порог % движения для REST API (было 3.5, 2.0) 3.0
-    'instant_threshold': 3.0,                       # Порог % движения для WebSocket (мейджоры) (было 2.0, 1.2) 2.5
-    'shitcoin_instant_threshold': 4.0,              # Порог % движения для WebSocket (щиткоины) (было 1.5, 0.8) 2.0
+    'threshold': 5.0,                               # Порог % движения для REST API (было 3.5, 2.0) 3.0
+    'instant_threshold': 5.0,                       # Порог % движения для WebSocket (мейджоры) (было 2.0, 1.2) 2.5
+    'shitcoin_instant_threshold': 7.0,              # Порог % движения для WebSocket (щиткоины) (было 1.5, 0.8) 2.0
     'timeframes': ['1m', '3m', '5m', '15m', '30m'], # Было ['1m', '3m', '5m']
     'min_volume_usdt': 1000,                        # Включает монеты с объемом от 1000 USDT (очень низкий порог → почти все монеты)
     'max_pairs_to_scan': 600,                       # Было 600
     'include_low_liquidity': True,
     'send_top_pumps': 999,
-    'cooldown_minutes': 15,                         # Было 5
+    'cooldown_minutes': 30,                         # Было 5
     'batch_size': 50,                               # Размер батча для параллельного сканирования (меньше = быстрее, но больше нагрузка) было 100
     'delay_between_batches': 0.3,                   # Задержка между батчами в секундах, было 0.1
         # В FastPumpScanner.__init__
@@ -574,7 +574,8 @@ LEVEL_STRENGTH_SETTINGS = {
 
 LEVEL_ANALYSIS_SETTINGS = {
     'enabled': True,  # вкл/выкл анализ уровней
-    
+    'timeframes': ['four_hourly', 'daily', 'weekly'],  # ← Уровни будут искаться только на старших ТФ
+
     # Какие уровни анализировать
     'level_types': {
         'horizontal': True,      # горизонтальные уровни
@@ -590,6 +591,7 @@ LEVEL_ANALYSIS_SETTINGS = {
         'max_levels_per_tf': 10,           # макс уровней с одного ТФ
         'max_total_levels': 50,             # макс всего уровней
         'min_touches': 3,                    # мин касаний для значимости
+        'min_strength': 50,                  # Это отсеет слабые уровни (сила < 50) и оставит только сильные
         'touch_tolerance': 0.3,               # допуск касания в %
     },
     
