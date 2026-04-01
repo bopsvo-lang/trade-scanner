@@ -4243,8 +4243,23 @@ class MultiTimeframeAnalyzer:
         df = dataframes['current']
         last = df.iloc[-1]
         prev = df.iloc[-2] if len(df) > 1 else last
-        
+               
         logger.info(f"  📊 {symbol} - Цена: {last['close']}, RSI: {last['rsi'] if pd.notna(last['rsi']) else 'N/A'}")
+
+        # Словарь для перевода таймфреймов
+        tf_short = {
+            'monthly': '1М',
+            'weekly': '1н',
+            'daily': '1д',
+            'four_hourly': '4ч',
+            'hourly': '1ч',
+            '30m': '30м',
+            'current': '15м',
+            '5m': '5м',
+            '3m': '3м',
+            '1m': '1м'
+        }
+
         # Переменные для отслеживания пробоя
         breakout_confirmed = False
 
@@ -4421,6 +4436,113 @@ class MultiTimeframeAnalyzer:
                 if signal_type == 'accumulation':
                     signal_type = 'regular'
 
+        # ===== АНАЛИЗ УРОВНЕЙ НА СТАРШИХ ТАЙМФРЕЙМАХ =====
+        senior_tf_analysis = {
+            'has_senior_level': False,
+            'levels': [],
+            'signals': [],
+            'strength': 0
+        }
+        
+        senior_tfs = ['four_hourly', 'daily', 'weekly']  # 4ч, 1д, 1н
+        
+        for tf_name in senior_tfs:
+            if tf_name not in dataframes or dataframes[tf_name] is None:
+                continue
+            
+            tf_df = dataframes[tf_name]
+            current_price = last['close']
+            
+            # 1. Предыдущие хаи/лои (локальные экстремумы)
+            recent_high = tf_df['high'].tail(20).max()
+            recent_low = tf_df['low'].tail(20).min()
+            
+            high_distance = (recent_high - current_price) / current_price * 100
+            low_distance = (current_price - recent_low) / current_price * 100
+            
+            if 0 < high_distance <= 1.0:
+                senior_tf_analysis['has_senior_level'] = True
+                senior_tf_analysis['levels'].append({
+                    'tf': tf_name,
+                    'type': 'resistance',
+                    'price': recent_high,
+                    'distance': high_distance,
+                    'source': f'Предыдущий хай на {tf_name}'
+                })
+                senior_tf_analysis['signals'].append(f"📈 Цена у предыдущего хая на {tf_short.get(tf_name, tf_name)}: +{high_distance:.2f}%")
+                senior_tf_analysis['strength'] += 20
+            
+            if 0 < low_distance <= 1.0:
+                senior_tf_analysis['has_senior_level'] = True
+                senior_tf_analysis['levels'].append({
+                    'tf': tf_name,
+                    'type': 'support',
+                    'price': recent_low,
+                    'distance': low_distance,
+                    'source': f'Предыдущий лой на {tf_name}'
+                })
+                senior_tf_analysis['signals'].append(f"📉 Цена у предыдущего лоя на {tf_short.get(tf_name, tf_name)}: -{low_distance:.2f}%")
+                senior_tf_analysis['strength'] += 20
+            
+            # 2. Уровни Фибоначчи на старших ТФ
+            if hasattr(self, 'fibonacci') and self.fibonacci:
+                try:
+                    fib_result = self.fibonacci.analyze(tf_df, tf_name)
+                    if fib_result.get('has_signal'):
+                        for signal_text in fib_result.get('signals', [])[:2]:
+                            if "сопротивление" in signal_text or "поддержка" in signal_text:
+                                senior_tf_analysis['has_senior_level'] = True
+                                senior_tf_analysis['signals'].append(signal_text)
+                                senior_tf_analysis['strength'] += 15
+                except Exception as e:
+                    logger.debug(f"Ошибка Фибоначчи для {tf_name}: {e}")
+            
+            # 3. FVG зоны на старших ТФ
+            if fvg_analysis and fvg_analysis.get('zones'):
+                for zone in fvg_analysis['zones']:
+                    if zone.get('tf') == tf_name:
+                        if zone['min'] <= current_price <= zone['max']:
+                            senior_tf_analysis['has_senior_level'] = True
+                            senior_tf_analysis['levels'].append({
+                                'tf': tf_name,
+                                'type': 'zone',
+                                'price': zone,
+                                'distance': 0,
+                                'source': f'FVG зона на {tf_name}'
+                            })
+                            senior_tf_analysis['signals'].append(f"📐 FVG зона на {tf_short.get(tf_name, tf_name)}: {zone['min']:.4f}-{zone['max']:.4f}")
+                            senior_tf_analysis['strength'] += 25
+            
+            # 4. Конфлюенция EMA на старших ТФ
+            ema_periods = [7, 14, 21, 28, 50, 100]
+            for period in ema_periods:
+                col = f'ema_{period}'
+                if col in tf_df.columns:
+                    ema_price = tf_df[col].iloc[-1]
+                    distance = abs(ema_price - current_price) / current_price * 100
+                    if distance <= 1.0:
+                        level_type = 'resistance' if ema_price > current_price else 'support'
+                        senior_tf_analysis['has_senior_level'] = True
+                        senior_tf_analysis['levels'].append({
+                            'tf': tf_name,
+                            'type': level_type,
+                            'price': ema_price,
+                            'distance': distance,
+                            'source': f'EMA {period} на {tf_name}'
+                        })
+                        senior_tf_analysis['signals'].append(f"📊 EMA {period} на {tf_short.get(tf_name, tf_name)}: {level_type} {ema_price:.4f}")
+                        senior_tf_analysis['strength'] += 10
+        
+        # Добавляем сигналы старших ТФ в причины
+        if senior_tf_analysis['has_senior_level']:
+            for signal in senior_tf_analysis['signals'][:3]:
+                if signal not in reasons:
+                    reasons.append(signal)
+            confidence += senior_tf_analysis['strength'] / 10
+            logger.info(f"  ✅ Найдено {len(senior_tf_analysis['levels'])} уровней на старших ТФ")
+        else:
+            reasons.append("⚠️ Нет совпадений с уровнями на старших ТФ — возможен дальнейший рост")
+
         # ===== АНАЛИЗ ТРЕНДОВЫХ ЛИНИЙ =====
         trendline_breakout = False
         trendline_warnings = []
@@ -4527,6 +4649,40 @@ class MultiTimeframeAnalyzer:
                     
                     logger.info(f"  ✅ {symbol} - Подтвержденный пробой на {tf_display}! +30 confidence")
                     break  # берем первый подтвержденный пробой
+
+        # ===== АНАЛИЗ НАКЛОННЫХ УРОВНЕЙ НА МЛАДШИХ ТФ =====
+        trendline_breakout_5m = False
+        trendline_breakout_15m = False
+        
+        trend_analyzer = TrendLineAnalyzer()
+        
+        # Проверяем на 5м
+        if '5m' in dataframes and dataframes['5m'] is not None:
+            df_5m = dataframes['5m']
+            try:
+                trend_lines_5m = trend_analyzer.find_trend_lines(df_5m, touch_count=3)
+                for line in trend_lines_5m:
+                    if line.get('is_broken', False):
+                        trendline_breakout_5m = True
+                        reasons.append(f"📉 Пробой наклонного уровня на 5м ({line['touches']} касаний)")
+                        confidence += 15
+                        break
+            except Exception as e:
+                logger.debug(f"Ошибка анализа наклонных на 5м: {e}")
+        
+        # Проверяем на 15м
+        if 'current' in dataframes and dataframes['current'] is not None:
+            df_15m = dataframes['current']
+            try:
+                trend_lines_15m = trend_analyzer.find_trend_lines(df_15m, touch_count=3)
+                for line in trend_lines_15m:
+                    if line.get('is_broken', False):
+                        trendline_breakout_15m = True
+                        reasons.append(f"📉 Пробой наклонного уровня на 15м ({line['touches']} касаний)")
+                        confidence += 10
+                        break
+            except Exception as e:
+                logger.debug(f"Ошибка анализа наклонных на 15м: {e}")
 
         # ===== ПРОВЕРКА СТРАТЕГИИ: ТРЕБОВАНИЕ ПРОБОЯ =====
         logger.info(f"  🔍 {symbol} - Проверка стратегии: require_breakout_confirmation={strategy['require_breakout_confirmation']}, breakout_confirmed={breakout_confirmed}")
@@ -4880,6 +5036,23 @@ class MultiTimeframeAnalyzer:
                     confidence += VOLUME_ANALYSIS_SETTINGS['imbalance']['weight']
                     logger.info(f"  📊 {symbol} - Имбаланс: {len(imbalance_result['signals'])} сигналов")
 
+        # ===== RSI ДИВЕРГЕНЦИЯ НА СТАРШИХ ТФ =====
+        rsi_divergence = False
+        if self.divergence:
+            for tf_name in senior_tfs:
+                if tf_name in dataframes and dataframes[tf_name] is not None:
+                    tf_df = dataframes[tf_name]
+                    if 'rsi' in tf_df.columns:
+                        try:
+                            divergence = self.divergence.detect_rsi_divergence(tf_df, tf_name)
+                            if divergence.get('bullish') or divergence.get('bearish'):
+                                rsi_divergence = True
+                                reasons.append(f"🔄 RSI дивергенция на {tf_short.get(tf_name, tf_name)}")
+                                confidence += 20
+                                break
+                        except Exception as e:
+                            logger.debug(f"Ошибка RSI дивергенции для {tf_name}: {e}")
+
         # ===== АНАЛИЗ ДИСПЕРСИИ =====
         if DISPERSION_ANALYSIS_SETTINGS['enabled']:
             logger.info(f"  🔍 {symbol} - Анализ дисперсии")
@@ -5116,8 +5289,59 @@ class MultiTimeframeAnalyzer:
         
         logger.info(f"  🎯 [5] Направление перед проверкой NEUTRAL: {direction}")
                
-        logger.info(f"  🎯 НАПРАВЛЕНИЕ ПЕРЕД РАСЧЕТОМ ЦЕЛЕЙ: {direction}")
+        logger.info(f"  🎯 НАПРАВЛЕНИЕ ПЕРЕД РАСЧЕТОМ ЦЕЛЕЙ: {direction}")        
 
+        # ===== ФИЛЬТР КАЧЕСТВА СИГНАЛА =====
+        signal_quality = 0
+        quality_reasons = []
+        
+        # Проверяем наличие сильных уровней на старших ТФ
+        if senior_tf_analysis.get('has_senior_level', False):
+            signal_quality += 2
+            quality_reasons.append("✅ Есть сильный уровень на старших ТФ")
+        
+        # Проверяем наличие FVG
+        if fvg_analysis.get('has_fvg', False):
+            signal_quality += 2
+            quality_reasons.append("✅ Есть FVG")
+        
+        # Проверяем наличие конфлюенции (2+ уровней)
+        if potential_analysis and potential_analysis.get('level_count', 0) >= 2:
+            signal_quality += 2
+            quality_reasons.append(f"✅ Есть конфлюенция ({potential_analysis['level_count']} уровней)")
+        
+        # Проверяем наличие подтвержденного пробоя
+        if breakout_confirmed:
+            signal_quality += 3
+            quality_reasons.append("✅ Есть подтвержденный пробой")
+        
+        # Проверяем наличие пробоя наклонного уровня на 5м/15м
+        if trendline_breakout_5m or trendline_breakout_15m:
+            signal_quality += 2
+            quality_reasons.append("✅ Есть пробой наклонного уровня")
+        
+        # Проверяем наличие RSI дивергенции
+        if rsi_divergence:
+            signal_quality += 2
+            quality_reasons.append("✅ Есть RSI дивергенция")
+        
+        # Проверяем наличие накопления
+        if accumulation_analysis and accumulation_analysis.get('has_accumulation', False):
+            signal_quality += 2
+            quality_reasons.append("✅ Есть накопление")
+        
+        # Логируем качество
+        logger.info(f"  📊 Качество сигнала: {signal_quality}/10")
+        for qr in quality_reasons[:3]:
+            logger.info(f"     {qr}")
+        
+        # Если качество ниже порога — отменяем сигнал
+        MIN_QUALITY = 3  # минимум 3 балла
+        if signal_quality < MIN_QUALITY:
+            reasons.append(f"⚠️ Низкое качество сигнала ({signal_quality}/10) — требуется минимум {MIN_QUALITY}")
+            direction = 'NEUTRAL'
+            logger.info(f"  ⏭️ {symbol} - Сигнал отменен: низкое качество ({signal_quality}/10)")
+        
         # ===== РАСЧЕТ ЦЕЛЕЙ ПО ATR С ДИНАМИЧЕСКИМИ НАСТРОЙКАМИ =====
         from config import DYNAMIC_TARGET_SETTINGS
         
