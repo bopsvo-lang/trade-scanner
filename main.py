@@ -3005,23 +3005,23 @@ class BingxFetcher(BaseExchangeFetcher):
             return []
     
     async def fetch_ohlcv(self, symbol: str, timeframe: str, limit: int = 200) -> Optional[pd.DataFrame]:
-    try:
-        ohlcv = await self.exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
-        if not ohlcv or len(ohlcv) < 20:
+        try:
+            ohlcv = await self.exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
+            if not ohlcv or len(ohlcv) < 20:
+                return None
+            
+            df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+            df.set_index('timestamp', inplace=True)
+            return df
+        except Exception as e:
+            error_msg = str(e)
+            if "pause currently" in error_msg or "109415" in error_msg:
+                logger.debug(f"⏭️ Пропускаю приостановленную пару {symbol}")
+                return None
+            if "404" not in error_msg:
+                logger.error(f"Ошибка BingX {symbol}: {e}")
             return None
-        
-        df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        df.set_index('timestamp', inplace=True)
-        return df
-    except Exception as e:
-        error_msg = str(e)
-        if "pause currently" in error_msg or "109415" in error_msg:
-            logger.debug(f"⏭️ Пропускаю приостановленную пару {symbol}")
-            return None
-        if "404" not in error_msg:
-            logger.error(f"Ошибка BingX {symbol}: {e}")
-        return None
     
     async def fetch_funding_rate(self, symbol: str) -> Optional[float]:
         try:
