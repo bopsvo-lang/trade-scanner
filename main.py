@@ -7273,7 +7273,7 @@ class MultiExchangeScannerBot:
                 logger.info(f"⏭️ Пропускаю повторный памп-сигнал {coin} ({signal['direction']}) через {time_diff:.1f} мин")
                 return
         else:
-            logger.info(f"  🔍 Первый сигнал для {coin}"
+            logger.info(f"  🔍 Первый сигнал для {coin}")
 
         # ✅ Защита от дублирования
         if hasattr(self, 'last_signal_time'):
