@@ -1228,3 +1228,40 @@ STRATEGY_SETTINGS = {
 # Ср-Чт	 require_close_pct = 30	                Проверить FVG
 # Пт-Сб	 min_confluence_levels = 2	            Проверить конфлюенцию
 # Вс	 require_breakout_confirmation = True   Проверить пробой
+
+# ============== НАСТРОЙКИ ФИБОНАЧЧИ ==============
+FIBONACCI_SETTINGS = {
+    'levels': {
+        'retracement': [0.236, 0.382, 0.5, 0.618, 0.786, 0.86],
+        'extension': [-0.18, -0.27, -0.618]
+    },
+    'zones': {
+        'accumulation': [1, 0.86, 0.786, 0.618],
+        'correction': [0, -0.18, -0.27, -0.618]
+    },
+    'lookback_candles': 3,
+    'min_distance_pct': 0.5,
+    'touch_tolerance': 0.003,
+    'timeframes': {
+        'monthly': {'enabled': True},
+        'weekly': {'enabled': True},
+        'daily': {'enabled': True},
+        'four_hourly': {'enabled': True},
+        'hourly': {'enabled': True},
+        '30m': {'enabled': True},
+        'current': {'enabled': True},
+    },
+    'weights': {
+        'monthly': 3.0,
+        'weekly': 2.5,
+        'daily': 2.0,
+        'four_hourly': 1.8,
+        'hourly': 1.5,
+        '30m': 1.2,
+        'current': 1.0,
+    },
+    'level_strength': {
+        0.618: 95, 0.786: 90, 0.86: 85, 0.5: 80,
+        0.382: 70, 0.236: 65, -0.27: 85, -0.618: 95, -0.18: 75, 1.0: 100, 0: 60
+    }
+}
