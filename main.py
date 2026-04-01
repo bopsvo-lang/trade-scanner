@@ -7186,7 +7186,7 @@ class MultiExchangeScannerBot:
         if hasattr(self, 'last_signal_time'):
             if coin in self.last_signal_time:
                 time_diff = (current_time - self.last_signal_time[coin]).total_seconds() / 60
-                if time_diff < 5:  # 5 минут кд
+                if time_diff < 20:  # 5 минут кд
                     last_dir = self.last_signal_direction.get(coin)
                     if last_dir == signal['direction']:
                         logger.info(f"⏭️ Пропускаю повторный сигнал {coin} ({signal['direction']}) через {time_diff:.1f} мин")
@@ -7263,11 +7263,23 @@ class MultiExchangeScannerBot:
         coin = self.extract_coin(signal['symbol'])
         current_time = datetime.now()
         
+        # ✅ ЛОГИРОВАНИЕ ДЛЯ ОТЛАДКИ
+        logger.info(f"  🔍 send_pump_signal: coin={coin}, direction={signal['direction']}")
+        if coin in self.last_signal_time:
+            time_diff = (current_time - self.last_signal_time[coin]).total_seconds() / 60
+            last_dir = self.last_signal_direction.get(coin)
+            logger.info(f"  🔍 Последний сигнал {coin}: {time_diff:.1f} мин назад, направление={last_dir}")
+            if time_diff < 30 and last_dir == signal['direction']:
+                logger.info(f"⏭️ Пропускаю повторный памп-сигнал {coin} ({signal['direction']}) через {time_diff:.1f} мин")
+                return
+        else:
+            logger.info(f"  🔍 Первый сигнал для {coin}"
+
         # ✅ Защита от дублирования
         if hasattr(self, 'last_signal_time'):
             if coin in self.last_signal_time:
                 time_diff = (current_time - self.last_signal_time[coin]).total_seconds() / 60
-                if time_diff < 5:  # 5 минут кд
+                if time_diff < 20:  # 5 минут кд
                     last_dir = self.last_signal_direction.get(coin)
                     if last_dir == signal['direction']:
                         logger.info(f"⏭️ Пропускаю повторный памп-сигнал {coin} ({signal['direction']}) через {time_diff:.1f} мин")
