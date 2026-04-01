@@ -5100,15 +5100,21 @@ class MultiTimeframeAnalyzer:
                 confidence -= fvg_below * 3
         
         logger.info(f"  🎯 [4] Направление после FVG анализа: {direction}")
+        
+        # ✅ НОРМАЛИЗАЦИЯ УВЕРЕННОСТИ
+        if confidence > 100:
+            confidence = min(100, confidence)
+            logger.info(f"  📊 Нормализована уверенность: {confidence:.1f}%")
 
+         # ПОТОМ ВЫВОДИМ ЛОГ (уже с нормализованной уверенностью)
         logger.info(f"  📊 {symbol} - Направление: {direction}, Уверенность: {confidence}")
         
-        logger.info(f"  🎯 [5] Направление перед проверкой NEUTRAL: {direction}")
-
         if direction == 'NEUTRAL':
             logger.info(f"⏭️ NEUTRAL сигнал для {symbol}")
             return None
         
+        logger.info(f"  🎯 [5] Направление перед проверкой NEUTRAL: {direction}")
+               
         logger.info(f"  🎯 НАПРАВЛЕНИЕ ПЕРЕД РАСЧЕТОМ ЦЕЛЕЙ: {direction}")
 
         # ===== РАСЧЕТ ЦЕЛЕЙ ПО ATR С ДИНАМИЧЕСКИМИ НАСТРОЙКАМИ =====
