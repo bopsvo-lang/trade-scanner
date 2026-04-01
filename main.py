@@ -2434,102 +2434,206 @@ class UniversalBreakoutDetector:
 
 class FibonacciAnalyzer:
     """
-    Анализ уровней Фибоначчи с учетом:
-    - Коррекций (0.236, 0.382, 0.5, 0.618, 0.786, 0.86)
-    - Расширений (0.18, 0.27, 0.618)
-    - Правила 3 свечей для точки B
-    - Автоматический перевод терминов на русский язык
+    Анализ уровней Фибоначчи с продвинутой логикой:
+    - Точки A и B определяются по паттерну 3 откатных свечей + 1 подтверждающая
+    - Автоматическое перестроение при пробое -0.618
+    - Смена направления при пробое 1.0
+    - Поддержка разных таймфреймов с возможностью отключения
     """
     
     def __init__(self, settings: Dict = None):
+        from config import FIBONACCI_SETTINGS
         self.settings = settings or FIBONACCI_SETTINGS
-        self.retracement_levels = self.settings.get('retracement_levels', 
-                                                    [0.236, 0.382, 0.5, 0.618, 0.786, 0.86])
-        self.extension_levels = self.settings.get('extension_levels', 
-                                                  [0.18, 0.27, 0.618])
+        
+        # Уровни Фибоначчи
+        self.levels = self.settings.get('levels', {
+            'retracement': [0.236, 0.382, 0.5, 0.618, 0.786, 0.86],
+            'extension': [-0.18, -0.27, -0.618]
+        })
+        
+        # Все уровни (для расчетов)
+        self.all_levels = self.levels['retracement'] + self.levels['extension'] + [1.0, 0]
+        
+        # Зоны
+        self.zones = self.settings.get('zones', {
+            'accumulation': [1, 0.86, 0.786, 0.618],
+            'correction': [0, -0.18, -0.27, -0.618]
+        })
+        
+        # Сила уровней
+        self.level_strength = self.settings.get('level_strength', {
+            0.618: 95, 0.786: 90, 0.86: 85, 0.5: 80,
+            0.382: 70, 0.236: 65, -0.27: 85, -0.618: 95, -0.18: 75, 1.0: 100, 0: 60
+        })
+        
         self.lookback_candles = self.settings.get('lookback_candles', 3)
         self.min_distance = self.settings.get('min_distance_pct', 0.5)
+        self.touch_tolerance = self.settings.get('touch_tolerance', 0.003)
         
-        # Словарь для перевода таймфреймов
-        self.tf_translation = {
-            'monthly': 'месячный',
-            'weekly': 'недельный',
-            'daily': 'дневной',
-            'hourly': 'часовой',
-            'current': 'текущий'
+        # Какие ТФ анализировать
+        self.enabled_timeframes = {
+            tf: cfg.get('enabled', True) 
+            for tf, cfg in self.settings.get('timeframes', {}).items()
         }
         
-        # Словарь для перевода направления
-        self.dir_translation = {
-            'support': 'поддержка',
-            'resistance': 'сопротивление'
-        }
-    
-    def find_swing_low(self, df: pd.DataFrame, window: int = 5) -> Optional[int]:
-        """Поиск локального минимума (точка A для бычьего движения)"""
-        for i in range(window, len(df) - window):
-            if (df['low'].iloc[i] < df['low'].iloc[i-1] and 
-                df['low'].iloc[i] < df['low'].iloc[i-2] and
-                df['low'].iloc[i] < df['low'].iloc[i+1] and
-                df['low'].iloc[i] < df['low'].iloc[i+2]):
-                return i
-        return None
-    
-    def find_swing_high(self, df: pd.DataFrame, window: int = 5) -> Optional[int]:
-        """Поиск локального максимума (точка A для медвежьего движения)"""
-        for i in range(window, len(df) - window):
-            if (df['high'].iloc[i] > df['high'].iloc[i-1] and 
-                df['high'].iloc[i] > df['high'].iloc[i-2] and
-                df['high'].iloc[i] > df['high'].iloc[i+1] and
-                df['high'].iloc[i] > df['high'].iloc[i+2]):
-                return i
-        return None
-    
-    def find_point_b(self, df: pd.DataFrame, start_idx: int, is_bullish: bool) -> Optional[Dict]:
-        """Поиск точки B как максимума/минимума следующих N свечей"""
-        if start_idx + self.lookback_candles >= len(df):
-            return None
+        # Веса ТФ
+        self.tf_weights = self.settings.get('weights', {
+            'monthly': 3.0, 'weekly': 2.5, 'daily': 2.0,
+            'four_hourly': 1.8, 'hourly': 1.5, '30m': 1.2, 'current': 1.0
+        })
         
-        if is_bullish:
-            max_price = float('-inf')
-            max_idx = start_idx
-            for i in range(1, self.lookback_candles + 1):
-                idx = start_idx + i
-                if df['high'].iloc[idx] > max_price:
-                    max_price = df['high'].iloc[idx]
-                    max_idx = idx
-            return {'price': max_price, 'index': max_idx, 'type': 'bullish'}
+        # Словари для перевода
+        self.tf_short = {
+            'monthly': '1М', 'weekly': '1н', 'daily': '1д',
+            'four_hourly': '4ч', 'hourly': '1ч', '30m': '30м', 'current': '15м'
+        }
+        
+        logger.info("✅ FibonacciAnalyzer инициализирован (продвинутая версия)")
+    
+    def find_three_candle_pattern(self, df: pd.DataFrame, direction: str) -> Optional[Dict]:
+        """
+        Поиск паттерна: 3 откатные свечи + 1 подтверждающая
+        
+        direction: 'up' (ищем максимум) или 'down' (ищем минимум)
+        
+        Возвращает: {'price': цена, 'index': индекс, 'type': 'bullish'/'bearish'}
+        """
+        if direction == 'up':
+            # Ищем 3 красные откатные свечи (каждая ниже предыдущей по закрытию)
+            # + 1 зеленая свеча слева, которая закрылась выше
+            for i in range(self.lookback_candles + 2, len(df)):
+                # Проверяем 3 откатные свечи
+                red1 = df['close'].iloc[i-3] < df['open'].iloc[i-3]  # красная
+                red2 = df['close'].iloc[i-2] < df['open'].iloc[i-2]
+                red3 = df['close'].iloc[i-1] < df['open'].iloc[i-1]
+                
+                if not (red1 and red2 and red3):
+                    continue
+                
+                # Проверяем, что каждая ниже предыдущей по закрытию
+                if not (df['close'].iloc[i-2] < df['close'].iloc[i-3] and
+                        df['close'].iloc[i-1] < df['close'].iloc[i-2]):
+                    continue
+                
+                # Ищем зеленую подтверждающую свечу слева
+                green = df['close'].iloc[i-4] > df['open'].iloc[i-4]
+                if not green:
+                    continue
+                
+                # Берем максимум из зеленой свечи (с учетом тени)
+                green_high = df['high'].iloc[i-4]
+                return {
+                    'price': green_high,
+                    'index': i-4,
+                    'type': 'bullish'
+                }
+        else:  # direction == 'down'
+            # Ищем 3 зеленые откатные свечи (каждая выше предыдущей по закрытию)
+            # + 1 красная свеча слева, которая закрылась ниже
+            for i in range(self.lookback_candles + 2, len(df)):
+                # Проверяем 3 откатные свечи
+                green1 = df['close'].iloc[i-3] > df['open'].iloc[i-3]
+                green2 = df['close'].iloc[i-2] > df['open'].iloc[i-2]
+                green3 = df['close'].iloc[i-1] > df['open'].iloc[i-1]
+                
+                if not (green1 and green2 and green3):
+                    continue
+                
+                # Проверяем, что каждая выше предыдущей по закрытию
+                if not (df['close'].iloc[i-2] > df['close'].iloc[i-3] and
+                        df['close'].iloc[i-1] > df['close'].iloc[i-2]):
+                    continue
+                
+                # Ищем красную подтверждающую свечу слева
+                red = df['close'].iloc[i-4] < df['open'].iloc[i-4]
+                if not red:
+                    continue
+                
+                # Берем минимум из красной свечи (с учетом тени)
+                red_low = df['low'].iloc[i-4]
+                return {
+                    'price': red_low,
+                    'index': i-4,
+                    'type': 'bearish'
+                }
+        
+        return None
+    
+    def find_swing_point(self, df: pd.DataFrame, direction: str, start_idx: int = None) -> Optional[Dict]:
+        """
+        Поиск точки A (ближайший минимум/максимум)
+        direction: 'up' — ищем минимум, 'down' — ищем максимум
+        """
+        window = 5
+        if start_idx is None:
+            start_idx = len(df) - 1
+        
+        end_idx = max(0, start_idx - 100)
+        
+        if direction == 'up':
+            # Ищем локальный минимум
+            for i in range(start_idx, end_idx, -1):
+                if i < window or i >= len(df) - window:
+                    continue
+                is_swing = all(
+                    df['low'].iloc[i] < df['low'].iloc[j]
+                    for j in range(i - window, i + window + 1) if j != i and 0 <= j < len(df)
+                )
+                if is_swing:
+                    return {'price': df['low'].iloc[i], 'index': i, 'type': 'bullish'}
         else:
-            min_price = float('inf')
-            min_idx = start_idx
-            for i in range(1, self.lookback_candles + 1):
-                idx = start_idx + i
-                if df['low'].iloc[idx] < min_price:
-                    min_price = df['low'].iloc[idx]
-                    min_idx = idx
-            return {'price': min_price, 'index': min_idx, 'type': 'bearish'}
+            # Ищем локальный максимум
+            for i in range(start_idx, end_idx, -1):
+                if i < window or i >= len(df) - window:
+                    continue
+                is_swing = all(
+                    df['high'].iloc[i] > df['high'].iloc[j]
+                    for j in range(i - window, i + window + 1) if j != i and 0 <= j < len(df)
+                )
+                if is_swing:
+                    return {'price': df['high'].iloc[i], 'index': i, 'type': 'bearish'}
+        
+        return None
     
     def calculate_fib_levels(self, point_a: float, point_b: float) -> Dict:
         """Расчет всех уровней Фибоначчи"""
         diff = point_b - point_a
         levels = {}
         
-        for level in self.retracement_levels:
+        # Ретрейсмент уровни (между A и B)
+        for level in self.levels['retracement']:
             price = point_b - diff * level
             levels[f'{level:.3f}'] = {
-                'price': round(price, 2),
+                'price': price,
                 'type': 'retracement',
                 'level': level,
                 'description': f'{level*100:.1f}%'
             }
         
-        for level in self.extension_levels:
+        # Уровень 1.0 (A)
+        levels['1.000'] = {
+            'price': point_a,
+            'type': 'retracement',
+            'level': 1.0,
+            'description': '100%'
+        }
+        
+        # Уровень 0 (B)
+        levels['0.000'] = {
+            'price': point_b,
+            'type': 'retracement',
+            'level': 0,
+            'description': '0%'
+        }
+        
+        # Расширения (за точкой B)
+        for level in self.levels['extension']:
             price = point_b + diff * level
-            levels[f'-{level:.3f}'] = {
-                'price': round(price, 2),
+            levels[f'{level:.3f}'] = {
+                'price': price,
                 'type': 'extension',
-                'level': -level,
-                'description': f'-{level*100:.1f}%'
+                'level': level,
+                'description': f'{level*100:.1f}%'
             }
         
         return levels
@@ -2543,80 +2647,100 @@ class FibonacciAnalyzer:
             distance = abs(current_price - level_price) / current_price * 100
             
             if distance < self.min_distance:
-                strength = 50
-                if level_data['level'] == 0.618:
-                    strength = 90
-                elif level_data['level'] == 0.5:
-                    strength = 80
-                elif level_data['level'] == 0.236:
-                    strength = 70
-                elif level_data['level'] == 0.786:
-                    strength = 85
-                elif level_data['level'] == -0.618:
-                    strength = 95
+                level_val = level_data['level']
+                strength = self.level_strength.get(level_val, 50)
                 
                 direction = 'support' if current_price < level_price else 'resistance'
-                
-                # Переводим направление на русский
-                direction_ru = self.dir_translation.get(direction, direction)
+                direction_ru = 'поддержка' if direction == 'support' else 'сопротивление'
                 
                 reactions.append({
                     'level': key,
                     'price': level_price,
                     'strength': strength,
-                    'description': f"{level_data['description']} ({direction_ru})"
+                    'description': f"{level_data['description']}",
+                    'direction': direction,
+                    'direction_ru': direction_ru,
+                    'level_val': level_val
                 })
         
         return reactions
     
     def analyze(self, df: pd.DataFrame, timeframe: str = 'current') -> Dict:
         """Анализ Фибоначчи на таймфрейме"""
-        result = {'has_signal': False, 'signals': [], 'strength': 0, 'levels': {}, 'timeframe': timeframe}
+        result = {
+            'has_signal': False, 
+            'signals': [], 
+            'strength': 0, 
+            'levels': {}, 
+            'timeframe': timeframe,
+            'trend_direction': None
+        }
         
-        # Бычье движение
-        low_idx = self.find_swing_low(df)
-        if low_idx:
-            point_a = df['low'].iloc[low_idx]
-            point_b_data = self.find_point_b(df, low_idx, True)
-            if point_b_data:
-                levels = self.calculate_fib_levels(point_a, point_b_data['price'])
-                reactions = self.check_price_reaction(df['close'].iloc[-1], levels)
-                for r in reactions:
-                    result['has_signal'] = True
-                    
-                    # Переводим таймфрейм на русский
-                    tf_ru = self.tf_translation.get(timeframe, timeframe)
-                    
-                    result['signals'].append(f"Фибо {tf_ru}: {r['description']}")
-                    result['strength'] = max(result['strength'], r['strength'])
-                    result['levels'] = levels
+        # Пропускаем, если ТФ отключен
+        if not self.enabled_timeframes.get(timeframe, True):
+            return result
         
-        # Медвежье движение
-        high_idx = self.find_swing_high(df)
-        if high_idx:
-            point_a = df['high'].iloc[high_idx]
-            point_b_data = self.find_point_b(df, high_idx, False)
-            if point_b_data:
-                levels = self.calculate_fib_levels(point_a, point_b_data['price'])
-                reactions = self.check_price_reaction(df['close'].iloc[-1], levels)
-                for r in reactions:
-                    result['has_signal'] = True
-                    
-                    # Переводим таймфрейм на русский
-                    tf_ru = self.tf_translation.get(timeframe, timeframe)
-                    
-                    result['signals'].append(f"Фибо {tf_ru}: {r['description']}")
-                    result['strength'] = max(result['strength'], r['strength'])
-                    result['levels'] = levels
+        # Определяем направление по EMA 9/21
+        if 'ema_9' in df.columns and 'ema_21' in df.columns:
+            if df['ema_9'].iloc[-1] > df['ema_21'].iloc[-1]:
+                trend = 'up'
+            else:
+                trend = 'down'
+        else:
+            trend = 'up' if df['close'].iloc[-1] > df['close'].iloc[-20] else 'down'
+        
+        # Ищем точку B по паттерну
+        pattern = self.find_three_candle_pattern(df, trend)
+        if not pattern:
+            return result
+        
+        point_b = pattern['price']
+        point_b_idx = pattern['index']
+        
+        # Ищем точку A (ближайший минимум/максимум перед точкой B)
+        point_a_data = self.find_swing_point(df, trend, point_b_idx)
+        if not point_a_data:
+            return result
+        
+        point_a = point_a_data['price']
+        
+        # Проверяем направление: для восходящего тренда A < B, для нисходящего A > B
+        is_bullish = point_a < point_b
+        if (trend == 'up' and not is_bullish) or (trend == 'down' and is_bullish):
+            return result
+        
+        # Рассчитываем уровни
+        levels = self.calculate_fib_levels(point_a, point_b)
+        
+        # Проверяем реакцию цены
+        current_price = df['close'].iloc[-1]
+        reactions = self.check_price_reaction(current_price, levels)
+        
+        for r in reactions:
+            result['has_signal'] = True
+            tf_short = self.tf_short.get(timeframe, timeframe)
+            
+            # Формируем сигнал с ценой
+            signal_text = (f"Фибо {tf_short}: {r['description']} "
+                          f"({r['direction_ru']} {r['price']:.4f})")
+            result['signals'].append(signal_text)
+            result['strength'] = max(result['strength'], r['strength'])
+            result['levels'] = levels
+            result['trend_direction'] = 'up' if is_bullish else 'down'
         
         return result
     
     def analyze_multi_timeframe(self, dataframes: Dict[str, pd.DataFrame]) -> Dict:
-        """Мультитаймфреймовый анализ Фибоначчи с переводом на русский"""
-        result = {'has_confluence': False, 'signals': [], 'strength': 0, 'levels': {}}
+        """Мультитаймфреймовый анализ Фибоначчи"""
+        result = {
+            'has_confluence': False,
+            'signals': [],
+            'strength': 0,
+            'levels': {},
+            'trend_directions': {}
+        }
         
-        # Приоритет таймфреймов (от большего к меньшему)
-        tf_priority = ['monthly', 'weekly', 'daily', 'hourly', 'current']
+        tf_priority = ['monthly', 'weekly', 'daily', 'four_hourly', 'hourly', '30m', 'current']
         
         for tf_name in tf_priority:
             if tf_name not in dataframes or dataframes[tf_name] is None:
@@ -2626,21 +2750,12 @@ class FibonacciAnalyzer:
             tf_result = self.analyze(df, tf_name)
             
             if tf_result['has_signal']:
-                # Вес для старших таймфреймов
-                weight = 1.0
-                if tf_name == 'monthly':
-                    weight = 3.0
-                elif tf_name == 'weekly':
-                    weight = 2.5
-                elif tf_name == 'daily':
-                    weight = 2.0
-                elif tf_name == 'hourly':
-                    weight = 1.5
+                weight = self.tf_weights.get(tf_name, 1.0)
                 
-                # Добавляем сигналы с уже переведенными таймфреймами
                 result['signals'].extend(tf_result['signals'])
                 result['strength'] += tf_result['strength'] * weight
                 result['levels'][tf_name] = tf_result['levels']
+                result['trend_directions'][tf_name] = tf_result['trend_direction']
                 result['has_confluence'] = True
         
         if result['strength'] > 100:
@@ -3561,7 +3676,7 @@ class MultiTimeframeAnalyzer:
         
         # Словари для форматирования
         tf_short = {
-            'monthly': '1м',
+            'monthly': '1М',
             'weekly': '1н',
             'daily': '1д',
             'four_hourly': '4ч',
@@ -3849,7 +3964,7 @@ class MultiTimeframeAnalyzer:
             'four_hourly': '4ч',
             'daily': '1д',
             'weekly': '1н',
-            'monthly': '1м'
+            'monthly': '1М'
         }
         
         # Приоритет таймфреймов (от старших к младшим)
