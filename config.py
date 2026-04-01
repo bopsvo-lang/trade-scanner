@@ -432,6 +432,13 @@ FIBONACCI_SETTINGS = {
     }
 }
 
+# ============== НАСТРОЙКИ ИСТОРИИ ФИБОНАЧЧИ ==============
+FIB_HISTORY_SETTINGS = {
+    'enabled': True,
+    'max_approaches': 10,
+    'ttl_seconds': 2592000,  # 30 дней
+}
+
 # ============== НАСТРОЙКИ VOLUME PROFILE ==============
 
 VOLUME_PROFILE_SETTINGS = {
