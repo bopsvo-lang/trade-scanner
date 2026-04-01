@@ -2937,15 +2937,7 @@ class BaseExchangeFetcher:
         return []
     
     async def fetch_ohlcv(self, symbol: str, timeframe: str, limit: int = 200) -> Optional[pd.DataFrame]:
-        try:
-            ohlcv = await self.exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
-            # ...
-        except Exception as e:
-            if "pause currently" in str(e) or "109415" in str(e):
-                logger.debug(f"⏭️ Пропускаю приостановленную пару {symbol}")
-                return None
-            logger.error(f"Ошибка BingX {symbol}: {e}")
-            return None
+        return None
     
     async def fetch_funding_rate(self, symbol: str) -> Optional[float]:
         return 0.0
@@ -3023,9 +3015,12 @@ class BingxFetcher(BaseExchangeFetcher):
             df.set_index('timestamp', inplace=True)
             return df
         except Exception as e:
-            if "404" not in str(e):
-                logger.error(f"Ошибка BingX {symbol}: {e}")
+        error_msg = str(e)
+        if "pause currently" in error_msg or "109415" in error_msg:
+            logger.debug(f"⏭️ Пропускаю приостановленную пару {symbol}")
             return None
+        logger.error(f"Ошибка BingX {symbol}: {e}")
+        return None
     
     async def fetch_funding_rate(self, symbol: str) -> Optional[float]:
         try:
