@@ -396,13 +396,40 @@ DISPERSION_ANALYSIS_SETTINGS = {
 }
 
 # ============== НАСТРОЙКИ ФИБОНАЧЧИ ==============
-
 FIBONACCI_SETTINGS = {
-    'retracement_levels': [0.236, 0.382, 0.5, 0.618, 0.786, 0.86],
-    'extension_levels': [0.18, 0.27, 0.618],
+    'levels': {
+        'retracement': [0.236, 0.382, 0.5, 0.618, 0.786, 0.86],
+        'extension': [-0.18, -0.27, -0.618]
+    },
+    'zones': {
+        'accumulation': [1, 0.86, 0.786, 0.618],
+        'correction': [0, -0.18, -0.27, -0.618]
+    },
     'lookback_candles': 3,
     'min_distance_pct': 0.5,
-    'weight_multiplier': 1.5,
+    'touch_tolerance': 0.003,
+    'timeframes': {
+        'monthly': {'enabled': True},
+        'weekly': {'enabled': True},
+        'daily': {'enabled': True},
+        'four_hourly': {'enabled': True},
+        'hourly': {'enabled': True},
+        '30m': {'enabled': True},
+        'current': {'enabled': True},
+    },
+    'weights': {
+        'monthly': 3.0,
+        'weekly': 2.5,
+        'daily': 2.0,
+        'four_hourly': 1.8,
+        'hourly': 1.5,
+        '30m': 1.2,
+        'current': 1.0,
+    },
+    'level_strength': {
+        0.618: 95, 0.786: 90, 0.86: 85, 0.5: 80,
+        0.382: 70, 0.236: 65, -0.27: 85, -0.618: 95, -0.18: 75, 1.0: 100, 0: 60
+    }
 }
 
 # ============== НАСТРОЙКИ VOLUME PROFILE ==============
@@ -887,22 +914,6 @@ MINOR_TF_SETTINGS = {
     }
 }
 
-# ============== НАСТРОЙКИ ФИБОНАЧЧИ (РАСШИРЕННЫЕ) ==============
-
-FIBONACCI_ADVANCED_SETTINGS = {
-    'enabled': True,
-    'retracement_levels': [0.0, 0.236, 0.382, 0.5, 0.618, 0.786, 0.86, 1.0],
-    'extension_levels': [1.272, 1.618, 2.0, 2.618],
-    'lookback_candles': 3,
-    'min_distance_pct': 0.5,
-    'weight_multiplier': 1.5,
-    'history_ttl_days': 30,
-    'convergence_tf_min': 2,
-    'convergence_tf_list': ['15m', '30m', '1h', '4h', '1d', '1w'],
-    'show_approach_count': True,
-    'approach_threshold': 0.5,
-}
-
 # ============== НАСТРОЙКИ ФОРМАТИРОВАНИЯ СИГНАЛОВ ==============
 
 SIGNAL_FORMAT_SETTINGS = {
@@ -916,14 +927,6 @@ SIGNAL_FORMAT_SETTINGS = {
         'weekly': '1н',
         'monthly': '1м'
     }
-}
-
-# ============== НАСТРОЙКИ ИСТОРИИ ФИБОНАЧЧИ ==============
-
-FIB_HISTORY_SETTINGS = {
-    'enabled': True,
-    'max_approaches': 10,
-    'ttl_seconds': 2592000,
 }
 
 # ============== НАСТРОЙКИ СОГЛАСОВАННОСТИ ТАЙМФРЕЙМОВ ==============
@@ -1228,40 +1231,3 @@ STRATEGY_SETTINGS = {
 # Ср-Чт	 require_close_pct = 30	                Проверить FVG
 # Пт-Сб	 min_confluence_levels = 2	            Проверить конфлюенцию
 # Вс	 require_breakout_confirmation = True   Проверить пробой
-
-# ============== НАСТРОЙКИ ФИБОНАЧЧИ ==============
-FIBONACCI_SETTINGS = {
-    'levels': {
-        'retracement': [0.236, 0.382, 0.5, 0.618, 0.786, 0.86],
-        'extension': [-0.18, -0.27, -0.618]
-    },
-    'zones': {
-        'accumulation': [1, 0.86, 0.786, 0.618],
-        'correction': [0, -0.18, -0.27, -0.618]
-    },
-    'lookback_candles': 3,
-    'min_distance_pct': 0.5,
-    'touch_tolerance': 0.003,
-    'timeframes': {
-        'monthly': {'enabled': True},
-        'weekly': {'enabled': True},
-        'daily': {'enabled': True},
-        'four_hourly': {'enabled': True},
-        'hourly': {'enabled': True},
-        '30m': {'enabled': True},
-        'current': {'enabled': True},
-    },
-    'weights': {
-        'monthly': 3.0,
-        'weekly': 2.5,
-        'daily': 2.0,
-        'four_hourly': 1.8,
-        'hourly': 1.5,
-        '30m': 1.2,
-        'current': 1.0,
-    },
-    'level_strength': {
-        0.618: 95, 0.786: 90, 0.86: 85, 0.5: 80,
-        0.382: 70, 0.236: 65, -0.27: 85, -0.618: 95, -0.18: 75, 1.0: 100, 0: 60
-    }
-}
