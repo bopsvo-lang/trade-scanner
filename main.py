@@ -4497,8 +4497,8 @@ class MultiTimeframeAnalyzer:
                 current_tf_name = TIMEFRAMES.get('current', '15m')
                 logger.info(f"  ⚠️ Нет данных {confirmation_tf}, использую {current_tf_name} для подтверждения")
             
-            trend_analyzer = TrendLineAnalyzer()
             # Уровни ищем на текущем ТФ (15m)
+            trend_analyzer = TrendLineAnalyzer()
             trend_lines = trend_analyzer.find_trend_lines(df, touch_count=3)
             
             for line in trend_lines:
@@ -4511,10 +4511,17 @@ class MultiTimeframeAnalyzer:
                 )
                 
                 if confirmed:
+                    # Формируем понятное описание уровня
+                    level_type = "сопротивления" if line['type'] == 'resistance' else "поддержки"
+                    tf_display = current_tf_name
+                    
                     reasons.append(f"✅ {confirmed['message']}")
                     confidence += 30
                     signal_type = 'confirmed_breakout'
                     breakout_confirmed = True
+                    
+                    # Добавляем понятную причину с указанием ТФ пробоя
+                    reasons.append(f"📈 Пробой наклонного {level_type} на {tf_display} ({line['touches']} касаний)")
                     
                     # Определяем направление
                     if confirmed['direction'] == 'вверх':
@@ -4522,7 +4529,7 @@ class MultiTimeframeAnalyzer:
                     else:
                         direction = 'SHORT 📉 (подтвержденный пробой)'
                     
-                    logger.info(f"  ✅ {symbol} - Подтвержденный пробой на {current_tf_name}! +30 confidence")
+                    logger.info(f"  ✅ {symbol} - Подтвержденный пробой на {tf_display}! +30 confidence")
                     break  # берем первый подтвержденный пробой
 
         # ===== ПРОВЕРКА СТРАТЕГИИ: ТРЕБОВАНИЕ ПРОБОЯ =====
