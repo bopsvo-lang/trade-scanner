@@ -3730,10 +3730,11 @@ class MultiTimeframeAnalyzer:
             for fvg in fvg_list:
                 try:
                     # Проверяем, не закрыта ли зона
-                    if self._is_fvg_closed(df, fvg):
-                        logger.info(f"    ⏭️ {tf_name} FVG пропущен (закрыт)")
-                        continue
-                    
+                    #if self._is_fvg_closed(df, fvg):
+                    #    logger.info(f"    ⏭️ {tf_name} FVG пропущен (закрыт)")
+                    #    continue
+                    logger.info(f"    ✅ {tf_name} FVG (всегда показываю): {fvg['price_min']:.6f}-{fvg['price_max']:.6f}")
+
                     # Проверяем, находится ли текущая цена в зоне FVG
                     in_zone = (fvg['price_min'] <= current_price <= fvg['price_max'])
                     
@@ -7036,11 +7037,25 @@ class MultiExchangeScannerBot:
     async def send_pump_signal(self, pump_data: Dict):
         signal = pump_data['signal']
         coin = self.extract_coin(signal['symbol'])
+        current_time = datetime.now()
+        
+        # ✅ Защита от дублирования
+        if hasattr(self, 'last_signal_time'):
+            if coin in self.last_signal_time:
+                time_diff = (current_time - self.last_signal_time[coin]).total_seconds() / 60
+                if time_diff < 5:  # 5 минут кд
+                    last_dir = self.last_signal_direction.get(coin)
+                    if last_dir == signal['direction']:
+                        logger.info(f"⏭️ Пропускаю повторный памп-сигнал {coin} ({signal['direction']}) через {time_diff:.1f} мин")
+                        return
+        else:
+            self.last_signal_time = {}
+            self.last_signal_direction = {}
         
         self.last_signals[coin] = {
             'symbol': signal['symbol'],
             'signal': signal,
-            'time': datetime.now()
+            'time': current_time
         }
         
         df = None
@@ -7070,6 +7085,10 @@ class MultiExchangeScannerBot:
                     reply_markup=pump_data['keyboard']
                 )
                 logger.info(f"✅ Отправлен памп-сигнал: {signal['symbol']}")
+            
+            # ✅ Сохраняем время и направление после успешной отправки
+            self.last_signal_time[coin] = current_time
+            self.last_signal_direction[coin] = signal['direction']
             
             if hasattr(self, 'stats'):
                 self.stats.add_signal(signal, 'pump')
