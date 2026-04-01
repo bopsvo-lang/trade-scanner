@@ -2042,7 +2042,7 @@ class LevelCollector:
                     price=price,
                     strength=strength,
                     tf=tf,
-                    source=f"локального максимума ({tf})",
+                    source=f"Локальный максимум ({tf})",
                     touches=touches
                 )
                 level.min_price = price * 0.995
@@ -2065,7 +2065,7 @@ class LevelCollector:
                     price=price,
                     strength=strength,
                     tf=tf,
-                    source=f"локального минимума ({tf})",
+                    source=f"Локальный минимум ({tf})",
                     touches=touches
                 )
                 level.min_price = price * 0.995
