@@ -6516,6 +6516,8 @@ class FastPumpScanner:
                 signal_text = f"DUMP {pump_change:.1f}%"
                 signal['direction'] = 'SHORT 📉 (пробой после дампа)'
                 signal['signal_type'] = 'DUMP_BREAKOUT'
+
+                logger.info(f"  🔍 bearish_score={bearish_score}, atr={signal.get('atr', 0)}")
                 
                 # ===== ПЕРЕСЧИТЫВАЕМ ЦЕЛИ ДЛЯ SHORT =====
                 current_price = signal['price']
