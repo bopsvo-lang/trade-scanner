@@ -332,6 +332,15 @@ ACCUMULATION_SETTINGS = {
     'volume_growth_threshold': 1.3,      # рост объема на 30%
     'price_compression_ratio': 0.5,      # сжатие цены на 50%
     'min_accumulation_bars': 15,         # минимум свечей в боковике
+# Три сигнала накопления
+    'send_accumulation_alert_once': True,           # Сигнал 1: "В накоплении" (один раз)
+    'send_compression_alert': True,                 # Сигнал 2: "Поджатие к уровню"
+    'require_breakout_for_entry': True,             # Сигнал 3: "Выход" только после пробоя
+    
+    # Параметры поджатия
+    'compression_distance_pct': 1.0,                # Расстояние до границы в % (1%)
+    'compression_volume_threshold': 1.3,            # Рост объема на 30%
+    'compression_atr_threshold': 1.5,               # ATR < 1.5%
 }
 
 # ============== НАСТРОЙКИ АНАЛИЗА ОБЪЕМОВ ==============
