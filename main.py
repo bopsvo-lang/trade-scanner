@@ -695,6 +695,48 @@ class AccumulationAnalyzer:
         zones.sort(key=lambda x: (x['count'], x['strength']), reverse=True)
         
         return zones    
+
+    def detect_compression(self, df: pd.DataFrame) -> Dict:
+        """Обнаружение сжатия волатильности перед импульсом"""
+        try:
+            recent = df.tail(20)
+            high_low_range = (recent['high'].max() - recent['low'].min()) / recent['close'].mean() * 100
+            
+            atr_pct = 0
+            if 'atr' in recent.columns:
+                atr = recent['atr'].mean()
+                atr_pct = atr / recent['close'].mean() * 100
+            
+            if high_low_range < 5 and atr_pct < 2:
+                return {
+                    'compression': True,
+                    'strength': 80,
+                    'description': f"📉 Сжатие волатильности: диапазон {high_low_range:.1f}%, ATR {atr_pct:.1f}%"
+                }
+        except Exception as e:
+            logger.debug(f"Ошибка detect_compression: {e}")
+        return {'compression': False}
+    
+    def detect_volume_growth(self, df: pd.DataFrame) -> Dict:
+        """Обнаружение роста объемов (подготовка к импульсу)"""
+        try:
+            if len(df) < 20:
+                return {'volume_growth': False}
+            
+            avg_volume_old = df['volume'].tail(20).head(10).mean()
+            avg_volume_new = df['volume'].tail(10).mean()
+            volume_growth = avg_volume_new / avg_volume_old if avg_volume_old > 0 else 1
+            
+            threshold = self.settings.get('volume_growth_threshold', 1.3)
+            if volume_growth >= threshold:
+                return {
+                    'volume_growth': True,
+                    'growth_pct': round((volume_growth - 1) * 100, 1),
+                    'description': f"📊 Рост объемов +{(volume_growth-1)*100:.0f}% перед импульсом"
+                }
+        except Exception as e:
+            logger.debug(f"Ошибка detect_volume_growth: {e}")
+        return {'volume_growth': False}
     
     def analyze(self, df: pd.DataFrame) -> Dict:
         """
@@ -735,6 +777,23 @@ class AccumulationAnalyzer:
             result['signals'].append(silent['description'])
             result['strength'] = max(result['strength'], silent.get('strength', 0))
             logger.info(f"  ✅ Накопление: тихая аккумуляция (сила {result['strength']:.0f}%)")
+
+        # ✅ НОВЫЕ ПРОВЕРКИ
+        # Сжатие волатильности
+        compression = self.detect_compression(df)
+        if compression.get('compression'):
+            result['has_accumulation'] = True
+            result['signals'].append(compression['description'])
+            result['strength'] = max(result['strength'], compression.get('strength', 70))
+            logger.info(f"  ✅ Накопление: сжатие волатильности")
+        
+        # Рост объемов
+        volume_growth = self.detect_volume_growth(df)
+        if volume_growth.get('volume_growth'):
+            result['has_accumulation'] = True
+            result['signals'].append(volume_growth['description'])
+            result['strength'] = max(result['strength'], min(100, volume_growth.get('growth_pct', 0) * 2))
+            logger.info(f"  ✅ Накопление: рост объемов +{volume_growth.get('growth_pct', 0)}%")
         
         # Если есть накопление, но направление не определено — определяем по VWAP
         if result['has_accumulation'] and not result['direction']:
@@ -7056,7 +7115,7 @@ class MultiExchangeScannerBot:
                     
                     dataframes = {}
                     for tf_name, tf_value in TIMEFRAMES.items():
-                        limit = 200 if tf_name == 'current' else 100
+                        limit = 100 if tf_name == 'current' else 50
                         df = await fetcher.fetch_ohlcv(pair, tf_value, limit)
                         if df is not None and not df.empty:
                             df = self.analyzer.calculate_indicators(df)
