@@ -7490,6 +7490,44 @@ class MultiExchangeScannerBot:
         except Exception as e:
             logger.error(f"❌ Ошибка отправки пампа: {e}")
     
+    async def _send_accumulation_message(self, signal: Dict, coin: str):
+        """Отправка сообщения о накоплении"""
+        contract_info = None
+        df = None
+        for fetcher in self.fetchers.values():
+            if fetcher.name == signal['exchange']:
+                contract_info = await fetcher.fetch_contract_info(signal['symbol'])
+                df = await fetcher.fetch_ohlcv(signal['symbol'], TIMEFRAMES.get('current', '15m'), limit=200)
+                break
+        
+        msg, keyboard = self.format_message(signal, contract_info)
+        
+        try:
+            if df is not None and not df.empty:
+                df = self.analyzer.calculate_indicators(df)
+                chart_buf = self.chart_generator.create_chart(df, signal, coin, TIMEFRAMES.get('current', '15m'))
+                await self.telegram_bot.send_photo(
+                    chat_id=ACCUMULATION_CHAT_ID,
+                    photo=chart_buf,
+                    caption=msg,
+                    parse_mode='HTML',
+                    reply_markup=keyboard
+                )
+            else:
+                await self.telegram_bot.send_message(
+                    chat_id=ACCUMULATION_CHAT_ID,
+                    text=msg,
+                    parse_mode='HTML',
+                    reply_markup=keyboard
+                )
+            logger.info(f"✅ Отправлен сигнал накопления: {signal['symbol']}")
+            
+            if hasattr(self, 'stats'):
+                self.stats.add_signal(signal, 'accumulation')
+                
+        except Exception as e:
+            logger.error(f"❌ Ошибка отправки сигнала накопления: {e}")
+
     async def send_accumulation_signal(self, signal: Dict):
         coin = self.extract_coin(signal['symbol'])
         
