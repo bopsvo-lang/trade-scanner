@@ -5224,6 +5224,39 @@ class MultiTimeframeAnalyzer:
                         target_str = f"{zone['max']:.6f}" if zone['max'] < 0.001 else f"{zone['max']:.4f}"
                         reasons.append(f"🎯 Цель: FVG {zone['tf_short']} {target_str} (-{zone['distance_pct']:.1f}%)")
 
+            # ===== ПРИОРИТЕТ СТАРШИХ ТАЙМФРЕЙМОВ =====
+            if senior_tf_analysis.get('has_senior_level', False):
+                # Проверяем наличие бычьих сигналов на 1д/1н
+                bullish_on_senior = False
+                for signal in senior_tf_analysis.get('signals', []):
+                    if any(word in signal for word in ['FVG', 'быч', 'поддержка', 'EMA']):
+                        if '1д' in signal or '1н' in signal:
+                            bullish_on_senior = True
+                            break
+                
+                # Медвежий сигнал на старших ТФ → SHORT
+                bearish_on_senior = False
+                for signal in senior_tf_analysis.get('signals', []):
+                    if any(word in signal for word in ['FVG', 'медвеж', 'сопротивление', 'EMA']):
+                        if '1д' in signal or '1н' in signal:
+                            bearish_on_senior = True
+                            break
+                
+                if bearish_on_senior and direction == 'LONG':
+                    old_direction = direction
+                    direction = 'SHORT'
+                    reasons.append(f"🔄 СМЕНА НАПРАВЛЕНИЯ: {old_direction} → SHORT (медвежий сигнал на 1д/1н)")
+                    confidence += 20
+                    logger.info(f"  🔄 Приоритет старших ТФ: LONG → SHORT")
+                
+                # ✅ БЫЧИЙ СИГНАЛ НА СТАРШИХ ТФ → LONG
+                if bullish_on_senior and direction == 'SHORT':
+                    old_direction = direction
+                    direction = 'LONG'
+                    reasons.append(f"🔄 СМЕНА НАПРАВЛЕНИЯ: {old_direction} → LONG (бычий сигнал на 1д/1н)")
+                    confidence += 20
+                    logger.info(f"  🔄 Приоритет старших ТФ: SHORT → LONG")
+
             # ===== ДЕТЕКТОР ВЫБИВА СТОПОВ =====
             stop_hunt = None
             if FEATURES['advanced']['patterns'] and STOP_HUNT_SETTINGS.get('enabled', True):
