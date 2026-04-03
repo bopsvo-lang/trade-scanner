@@ -737,6 +737,66 @@ class AccumulationAnalyzer:
         except Exception as e:
             logger.debug(f"Ошибка detect_volume_growth: {e}")
         return {'volume_growth': False}
+
+    def detect_compression_to_level(self, df: pd.DataFrame, current_price: float) -> Dict:
+        """
+        Обнаружение поджатия цены к уровню (границе диапазона)
+        """
+        try:
+            recent = df.tail(20)
+            range_high = recent['high'].max()
+            range_low = recent['low'].min()
+            
+            # Расстояние до границ
+            distance_to_high = (range_high - current_price) / current_price * 100
+            distance_to_low = (current_price - range_low) / current_price * 100
+            min_distance = min(distance_to_high, distance_to_low)
+            
+            # Проверяем, близко ли к границе
+            threshold = self.settings.get('compression_distance_pct', 1.0)
+            if min_distance > threshold:
+                return {'compression': False}
+            
+            # Определяем направление поджатия
+            if distance_to_high < distance_to_low:
+                direction = 'LONG'
+                level_price = range_high
+                level_type = 'сопротивлению'
+            else:
+                direction = 'SHORT'
+                level_price = range_low
+                level_type = 'поддержке'
+            
+            # Проверяем рост объема
+            avg_volume_old = df['volume'].tail(20).head(10).mean()
+            avg_volume_new = df['volume'].tail(10).mean()
+            volume_growth = avg_volume_new / avg_volume_old if avg_volume_old > 0 else 1
+            volume_ok = volume_growth >= self.settings.get('compression_volume_threshold', 1.3)
+            
+            # Проверяем сжатие волатильности
+            if 'atr' in df.columns:
+                atr_pct = df['atr'].tail(10).mean() / current_price * 100
+                atr_ok = atr_pct < self.settings.get('compression_atr_threshold', 1.5)
+            else:
+                atr_ok = True
+            
+            if volume_ok and atr_ok:
+                return {
+                    'compression': True,
+                    'direction': direction,
+                    'level_price': level_price,
+                    'level_type': level_type,
+                    'distance': min_distance,
+                    'volume_growth': (volume_growth - 1) * 100,
+                    'strength': 70,
+                    'description': f"📊 ПОДЖАТИЕ К {level_type.upper()}: {level_price:.4f} (рост объемов +{(volume_growth-1)*100:.0f}%, ATR {atr_pct:.1f}%)"
+                }
+            
+            return {'compression': False}
+            
+        except Exception as e:
+            logger.debug(f"Ошибка detect_compression_to_level: {e}")
+            return {'compression': False}
     
     def analyze(self, df: pd.DataFrame) -> Dict:
         """
@@ -4495,6 +4555,19 @@ class MultiTimeframeAnalyzer:
                 if signal_type == 'accumulation':
                     signal_type = 'regular'
 
+        # ===== ПОДЖАТИЕ К УРОВНЮ (для сигнала 2) =====
+        compression_analysis = None
+        if self.accumulation and ACCUMULATION_SETTINGS.get('send_compression_alert', True):
+            try:
+                compression_analysis = self.accumulation.detect_compression_to_level(df, last['close'])
+                if compression_analysis.get('compression'):
+                    reasons.append(compression_analysis['description'])
+                    confidence += compression_analysis.get('strength', 10)
+                    signal_type = 'compression'
+                    logger.info(f"  ✅ {symbol} - Обнаружено поджатие к уровню")
+            except Exception as e:
+                logger.error(f"Ошибка анализа поджатия: {e}")
+
         # ===== АНАЛИЗ УРОВНЕЙ НА СТАРШИХ ТАЙМФРЕЙМАХ =====
         senior_tf_analysis = {
             'has_senior_level': False,
@@ -7432,6 +7505,27 @@ class MultiExchangeScannerBot:
             'signal': signal,
             'time': datetime.now()
         }
+
+        # Сигнал 1: "В накоплении" (один раз)
+        if ACCUMULATION_SETTINGS.get('send_accumulation_alert_once', True):
+            if coin not in self.accumulation_alerts_sent:
+                self.accumulation_alerts_sent.add(coin)
+                signal['signal_type'] = 'accumulation'
+                signal['direction'] = f"{signal['direction']} (В НАКОПЛЕНИИ)"
+                await self._send_accumulation_message(signal, coin)
+                return
+        
+        # Сигнал 2: "Поджатие к уровню"
+        if signal.get('signal_type') == 'compression':
+            signal['direction'] = f"{signal['direction']} (ПОДЖАТИЕ К УРОВНЮ)"
+            await self._send_accumulation_message(signal, coin)
+            return
+        
+        # Сигнал 3: "Выход из накопления"
+        if ACCUMULATION_SETTINGS.get('require_breakout_for_entry', True):
+            if signal.get('breakout_confirmed'):
+                signal['direction'] = f"{signal['direction']} (ВЫХОД ИЗ НАКОПЛЕНИЯ)"
+                await self._send_accumulation_message(signal, coin)        
         
         contract_info = None
         df = None
