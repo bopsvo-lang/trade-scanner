@@ -18,7 +18,7 @@ UPDATE_INTERVAL = int(os.getenv('UPDATE_INTERVAL', 300))       # 15 минут �
 PUMP_SCAN_INTERVAL = int(os.getenv('PUMP_SCAN_INTERVAL', 30))  # 30 секунд для памп-сканера
 MIN_CONFIDENCE = int(os.getenv('MIN_CONFIDENCE', 55))
 TIMEFRAME = os.getenv('TIMEFRAME', '15m')
-PAIRS_TO_SCAN = int(os.getenv('PAIRS_TO_SCAN', 50))
+PAIRS_TO_SCAN = int(os.getenv('PAIRS_TO_SCAN', 30))            # Было 50
 
 # Реферальные ссылки
 REF_LINKS = {
@@ -69,7 +69,7 @@ PUMP_SCAN_SETTINGS = {
     'shitcoin_instant_threshold': 7.0,              # Порог % движения для WebSocket (щиткоины) (было 1.5, 0.8) 2.0
     'timeframes': ['1m', '3m', '5m', '15m', '30m'], # Было ['1m', '3m', '5m']
     'min_volume_usdt': 1000,                        # Включает монеты с объемом от 1000 USDT (очень низкий порог → почти все монеты)
-    'max_pairs_to_scan': 600,                       # Было 600
+    'max_pairs_to_scan': 300,                       # Было 600
     'include_low_liquidity': True,
     'send_top_pumps': 999,
     'cooldown_minutes': 30,                         # Было 5
@@ -322,10 +322,16 @@ INDICATOR_SETTINGS = {
 
 ACCUMULATION_SETTINGS = {
     'ad_threshold': 2.0,            # Порог для A/D дивергенции
-    'volume_spike_threshold': 2.0,  # Аномальный объем x2
-    'range_width_threshold': 5.0,   # Макс. ширина диапазона для консолидации
+    'volume_spike_threshold': 1.5,  # Аномальный объем x2, было 2.0 (меньше объем)
+    'range_width_threshold': 8.0,   # Макс. ширина диапазона для консолидации, было 5.0 (шире диапазон)
     'min_signals': 1,               # ✅ ИЗМЕНЕНО: минимум 1 сигнал (было 2)
     'lookback_period': 50,          # Период для анализа
+# ✅ НОВЫЕ
+    'early_detection': True,             # раннее обнаружение
+    'volume_growth_period': 10,          # свечей для роста объема
+    'volume_growth_threshold': 1.3,      # рост объема на 30%
+    'price_compression_ratio': 0.5,      # сжатие цены на 50%
+    'min_accumulation_bars': 15,         # минимум свечей в боковике
 }
 
 # ============== НАСТРОЙКИ АНАЛИЗА ОБЪЕМОВ ==============
