@@ -6825,6 +6825,7 @@ class MultiExchangeScannerBot:
         self.chart_generator = ChartGenerator()
         self.telegram_bot = Bot(token=TELEGRAM_TOKEN)
         self.last_signals = {}
+        self.accumulation_alerts_sent = set()
         self.breakout_tracker = BreakoutTracker()
         self.fakeout_detector = FakeoutDetector()
         
