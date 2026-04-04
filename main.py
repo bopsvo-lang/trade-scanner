@@ -5801,7 +5801,8 @@ class FastPumpScanner:
         
         # Получаем щиткоины с малым объемом
         shitcoins = await self._get_volatile_shitcoins(symbols)
-        
+        logger.info(f"🎯 Найдено щиткоинов: {len(shitcoins)}")
+
         # Берем топ-5 мейджоров для контроля
         majors = ['BTC/USDT:USDT', 'ETH/USDT:USDT', 'BNB/USDT:USDT', 'SOL/USDT:USDT', 'XRP/USDT:USDT']
         
@@ -5810,6 +5811,7 @@ class FastPumpScanner:
         
         # Ограничиваем до 100 пар
         priority_symbols = all_priority[:self.websocket_top_pairs]
+        logger.info(f"🎯 Итоговых монет для WebSocket: {len(priority_symbols)}")
         
         shitcoin_count = sum(1 for s in priority_symbols if s in shitcoins)
         major_count = len(priority_symbols) - shitcoin_count
@@ -5861,7 +5863,7 @@ class FastPumpScanner:
         
         # Сортируем по объему (от самых маленьких - самых волатильных)
         volumes.sort(key=lambda x: x[1])
-        top_shitcoins = [s for s, v in volumes[:150]]  # берем 150 самых маленьких
+        top_shitcoins = [s for s, v in volumes]  # берем 150 самых маленьких
         
         logger.info(f"🎯 Найдено {len(top_shitcoins)} щиткоинов с объемом < {self.shitcoin_volume_threshold/1_000_000:.1f}M$")
         return top_shitcoins
@@ -7620,9 +7622,11 @@ class MultiExchangeScannerBot:
             
             if not hasattr(self, 'stats'):
                 continue
-                
-            for signal_id, signal_data in self.stats.db['signals'].items():
-                if signal_data['status'] != 'pending':
+            
+            # ✅ Создаём копию списка ключей (чтобы избежать ошибки)
+            for signal_id in list(self.stats.db['signals'].keys()):
+                signal_data = self.stats.db['signals'].get(signal_id)
+                if not signal_data or signal_data['status'] != 'pending':
                     continue
                 
                 for fetcher in self.fetchers.values():
