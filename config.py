@@ -81,7 +81,7 @@ PUMP_SCAN_SETTINGS = {
     
     # Новые настройки для WebSocket
     'websocket_top_pairs': 200,                   # Сколько пар в WebSocket
-    'shitcoin_volume_threshold': 100_000,        # Объем < 0.5M$ = щиткоин
+    'shitcoin_volume_threshold': 100_000_000,        # Объем < 0.5M$ = щиткоин
     'websocket_reconnect_delay': 5,               # Задержка перед переподключением
 }
 
