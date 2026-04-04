@@ -5863,7 +5863,7 @@ class FastPumpScanner:
         
         # Сортируем по объему (от самых маленьких - самых волатильных)
         volumes.sort(key=lambda x: x[1])
-        top_shitcoins = [s for s, v in volumes]  # берем 150 самых маленьких
+        top_shitcoins = [s for s, v in volumes[:300]]  # берем 150 самых маленьких
         
         logger.info(f"🎯 Найдено {len(top_shitcoins)} щиткоинов с объемом < {self.shitcoin_volume_threshold/1_000_000:.1f}M$")
         return top_shitcoins
