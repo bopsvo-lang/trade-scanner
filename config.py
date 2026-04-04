@@ -81,7 +81,7 @@ PUMP_SCAN_SETTINGS = {
     
     # Новые настройки для WebSocket
     'websocket_top_pairs': 200,                   # Сколько пар в WebSocket
-    'shitcoin_volume_threshold': 100_000_000,        # Объем < 0.5M$ = щиткоин
+    'shitcoin_volume_threshold': 10_000_000,        # Объем < 0.5M$ = щиткоин
     'websocket_reconnect_delay': 5,               # Задержка перед переподключением
 }
 
@@ -144,7 +144,7 @@ WEBSOCKET_ANALYSIS_SETTINGS = {
     
     # Минимальный объем для учета
     'min_volume_usdt': {
-        'major': 100_000,  # 10M$ для мейджоров
+        'major': 10_000_000,  # 10M$ для мейджоров
         'shitcoin': 100_000,    # 200K$ для щиткоинов
     },
     
@@ -1241,7 +1241,7 @@ STRATEGY_SETTINGS = {
     },
     
     # Выбранная стратегия
-    'selected': 'active',  # active, conservative, aggressive
+    'selected': 'conservative',  # active, conservative, aggressive
 }
 
 # Типы стратегий. Как понять, что лучше:
