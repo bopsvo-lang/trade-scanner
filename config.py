@@ -1241,7 +1241,7 @@ STRATEGY_SETTINGS = {
     },
     
     # Выбранная стратегия
-    'selected': 'conservative',  # active, conservative, aggressive
+    'selected': 'active',  # active, conservative, aggressive
 }
 
 # Типы стратегий. Как понять, что лучше:
