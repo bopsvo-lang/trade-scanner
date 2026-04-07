@@ -6183,7 +6183,7 @@ class MultiTimeframeAnalyzer:
 
         # ✅ ЛОГИРОВАНИЕ ПОСЛЕ ПАТТЕРНОВ
         # logger.info(f"  📊 Все причины ПОСЛЕ паттернов: {reasons}")
-        
+
         # ===== РАСЧЕТ ЗОН ДОП.ВХОДА =====
         from config import ENTRY_ZONES_SETTINGS
         
@@ -6993,7 +6993,7 @@ class FastPumpScanner:
         Форматирование памп-сигнала для отправки с ПРАВИЛЬНЫМ направлением
         """
         logger.info(f"  📊 Все причины перед фильтром: {signal.get('reasons', [])}")
-        
+
         logger.info(f"  📊 format_pump_message START: направление до изменений = {signal.get('direction')}")
 
         coin = signal['symbol'].split('/')[0].replace('USDT', '')
@@ -8008,6 +8008,9 @@ class MultiExchangeScannerBot:
     
     async def send_pump_signal(self, pump_data: Dict):
         signal = pump_data['signal']
+
+        # ✅ ЛОГИРОВАНИЕ
+        logger.info(f"  📊 Причины в памп-сигнале перед отправкой: {signal.get('reasons', [])[:10]}")
         coin = self.extract_coin(signal['symbol'])
         current_time = datetime.now()
         
