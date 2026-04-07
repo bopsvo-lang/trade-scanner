@@ -103,6 +103,8 @@ from config import ACCUMULATION_SIGNAL_SETTINGS
 
 from config import STRATEGY_SETTINGS
 
+from config import PATTERN_SETTINGS
+
 # Настройка логирования
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -1653,6 +1655,553 @@ class LiquidityZoneDetector:
                         'action': 'breakdown_or_bounce'
                     }
         return None
+
+class PatternAnalyzer:
+    """Анализ графических паттернов"""
+    
+    def __init__(self, settings: Dict = None):
+        from config import PATTERN_SETTINGS
+        self.settings = settings or PATTERN_SETTINGS
+        self.tolerance = self.settings.get('double_top_bottom', {}).get('max_price_diff_pct', 1.0) / 100
+    
+    def find_double_top_bottom(self, df: pd.DataFrame, tf_name: str) -> Dict:
+        """
+        Поиск двойной вершины или двойного дна
+        """
+        result = {'has_pattern': False, 'type': None, 'direction': None, 
+                  'level': 0, 'strength': 0, 'description': ''}
+        
+        cfg = self.settings.get('double_top_bottom', {})
+        if not cfg.get('enabled', True):
+            return result
+        
+        min_distance = cfg.get('min_distance_bars', 5)
+        min_drop_pct = cfg.get('min_drop_pct', 2.0) / 100
+        
+        # Поиск двойной вершины
+        highs = df['high'].values
+        for i in range(min_distance, len(highs) - min_distance):
+            # Первая вершина
+            if not self._is_swing_high(df, i):
+                continue
+            
+            # Ищем вторую вершину на том же уровне
+            for j in range(i + min_distance, len(highs) - min_distance):
+                if not self._is_swing_high(df, j):
+                    continue
+                
+                # Проверяем, что цены близки
+                price_diff = abs(highs[i] - highs[j]) / highs[i]
+                if price_diff > self.tolerance:
+                    continue
+                
+                # Проверяем, что между ними было падение
+                mid_low = min(df['low'].iloc[i:j])
+                drop_pct = (highs[i] - mid_low) / highs[i]
+                if drop_pct < min_drop_pct:
+                    continue
+                
+                # Нашли двойную вершину!
+                result['has_pattern'] = True
+                result['type'] = 'double_top'
+                result['direction'] = 'SHORT'
+                result['level'] = highs[i]
+                result['strength'] = cfg.get('strength', 70)
+                result['description'] = f"🔻 ДВОЙНАЯ ВЕРШИНА на {tf_name}: {highs[i]:.4f}"
+                return result
+        
+        # Поиск двойного дна
+        lows = df['low'].values
+        for i in range(min_distance, len(lows) - min_distance):
+            if not self._is_swing_low(df, i):
+                continue
+            
+            for j in range(i + min_distance, len(lows) - min_distance):
+                if not self._is_swing_low(df, j):
+                    continue
+                
+                price_diff = abs(lows[i] - lows[j]) / lows[i]
+                if price_diff > self.tolerance:
+                    continue
+                
+                mid_high = max(df['high'].iloc[i:j])
+                rise_pct = (mid_high - lows[i]) / lows[i]
+                if rise_pct < min_drop_pct:
+                    continue
+                
+                result['has_pattern'] = True
+                result['type'] = 'double_bottom'
+                result['direction'] = 'LONG'
+                result['level'] = lows[i]
+                result['strength'] = cfg.get('strength', 70)
+                result['description'] = f"🟢 ДВОЙНОЕ ДНО на {tf_name}: {lows[i]:.4f}"
+                return result
+        
+        return result
+    
+    def _is_swing_high(self, df: pd.DataFrame, idx: int, window: int = 3) -> bool:
+        """Проверка, является ли свеча локальным максимумом"""
+        if idx < window or idx >= len(df) - window:
+            return False
+        high = df['high'].iloc[idx]
+        return all(high > df['high'].iloc[idx - i] for i in range(1, window + 1)) and \
+               all(high > df['high'].iloc[idx + i] for i in range(1, window + 1))
+    
+    def _is_swing_low(self, df: pd.DataFrame, idx: int, window: int = 3) -> bool:
+        """Проверка, является ли свеча локальным минимумом"""
+        if idx < window or idx >= len(df) - window:
+            return False
+        low = df['low'].iloc[idx]
+        return all(low < df['low'].iloc[idx - i] for i in range(1, window + 1)) and \
+               all(low < df['low'].iloc[idx + i] for i in range(1, window + 1))
+    
+    def analyze_multi_timeframe(self, dataframes: Dict[str, pd.DataFrame]) -> Dict:
+        """Анализ паттернов на всех таймфреймах"""
+        result = {'has_pattern': False, 'patterns': [], 'strength': 0, 'direction': None}
+        
+        timeframes = self.settings.get('timeframes', ['current', 'hourly'])
+        
+        tf_short = {
+            'current': '15м',
+            'hourly': '1ч',
+            'four_hourly': '4ч',
+            'daily': '1д',
+        }
+        
+        for tf_name in timeframes:
+            if tf_name not in dataframes or dataframes[tf_name] is None:
+                continue
+            
+            df = dataframes[tf_name]
+            
+            # Двойная вершина/дно
+            pattern = self.find_double_top_bottom(df, tf_short.get(tf_name, tf_name))
+            if pattern['has_pattern']:
+                result['has_pattern'] = True
+                result['patterns'].append(pattern)
+                result['strength'] = max(result['strength'], pattern['strength'])
+                result['direction'] = pattern['direction']
+            
+            # Флаг
+            pattern = self.find_flag(df, tf_short.get(tf_name, tf_name))
+            if pattern['has_pattern']:
+                result['has_pattern'] = True
+                result['patterns'].append(pattern)
+                result['strength'] = max(result['strength'], pattern['strength'])
+                result['direction'] = pattern['direction']
+            
+            # Клин
+            pattern = self.find_wedge(df, tf_short.get(tf_name, tf_name))
+            if pattern['has_pattern']:
+                result['has_pattern'] = True
+                result['patterns'].append(pattern)
+                result['strength'] = max(result['strength'], pattern['strength'])
+                result['direction'] = pattern['direction']
+            
+            # Голова и плечи
+            pattern = self.find_head_shoulders(df, tf_short.get(tf_name, tf_name))
+            if pattern['has_pattern']:
+                result['has_pattern'] = True
+                result['patterns'].append(pattern)
+                result['strength'] = max(result['strength'], pattern['strength'])
+                result['direction'] = pattern['direction']
+        
+        return result
+
+    def find_flag(self, df: pd.DataFrame, tf_name: str) -> Dict:
+        """
+        Поиск паттерна Флаг (Bull/Bear Flag)
+        """
+        result = {'has_pattern': False, 'type': None, 'direction': None,
+                'entry_price': 0, 'pole_pct': 0, 'strength': 0, 'description': ''}
+        
+        cfg = self.settings.get('flag', {})
+        if not cfg.get('enabled', True):
+            return result
+        
+        min_pole_pct = cfg.get('min_pole_pct', 3.0) / 100
+        min_cons_bars = cfg.get('min_consolidation_bars', 5)
+        max_cons_bars = cfg.get('max_consolidation_bars', 15)
+        max_slope_pct = cfg.get('max_slope_pct', 0.5) / 100
+        
+        # Поиск бычьего флага (LONG)
+        # 1. Ищем резкое движение вверх (древко)
+        for i in range(10, len(df) - max_cons_bars):
+            # Древко (Импульс): рост за 3-5 свечей
+            pole_start = i - 5
+            pole_end = i
+            pole_low = min(df['low'].iloc[pole_start:pole_end])
+            pole_high = max(df['high'].iloc[pole_start:pole_end])
+            pole_change = (pole_high - pole_low) / pole_low
+            
+            if pole_change < min_pole_pct:
+                continue
+            
+            # 2. Ищем консолидацию после древка (тело флага)
+            for j in range(i + min_cons_bars, min(i + max_cons_bars, len(df))):
+                cons_highs = df['high'].iloc[i:j]
+                cons_lows = df['low'].iloc[i:j]
+                
+                # Проверяем наклон флага (должен быть против тренда)
+                # Для бычьего флага — наклон вниз (нисходящая консолидация)
+                slope = (cons_highs.iloc[-1] - cons_highs.iloc[0]) / cons_highs.iloc[0] / (j - i)
+                
+                if slope > max_slope_pct:  # наклон вверх — не подходит
+                    continue
+                
+                # 3. Проверяем пробой вверх
+                current_price = df['close'].iloc[-1]
+                breakout_level = cons_highs.max()
+                
+                if current_price > breakout_level:
+                    # Проверяем объём на пробое
+                    avg_volume = df['volume'].iloc[i:j].mean()
+                    last_volume = df['volume'].iloc[-1]
+                    volume_ratio = last_volume / avg_volume if avg_volume > 0 else 1
+                    
+                    if volume_ratio < cfg.get('volume_confirmation', 1.3):
+                        continue
+                    
+                    result['has_pattern'] = True
+                    result['type'] = 'bull_flag'
+                    result['direction'] = 'LONG'
+                    result['entry_price'] = breakout_level
+                    result['pole_pct'] = pole_change * 100
+                    result['strength'] = cfg.get('strength', 65)
+                    result['description'] = f"🚩 БЫЧИЙ ФЛАГ на {tf_name}: импульс +{pole_change*100:.1f}%, консолидация {j-i} свечей"
+                    return result
+        
+        # Поиск медвежьего флага (SHORT)
+        for i in range(10, len(df) - max_cons_bars):
+            # Древко: падение за 3-5 свечей
+            pole_start = i - 5
+            pole_end = i
+            pole_high = max(df['high'].iloc[pole_start:pole_end])
+            pole_low = min(df['low'].iloc[pole_start:pole_end])
+            pole_change = (pole_high - pole_low) / pole_high
+            
+            if pole_change < min_pole_pct:
+                continue
+            
+            # Консолидация
+            for j in range(i + min_cons_bars, min(i + max_cons_bars, len(df))):
+                cons_highs = df['high'].iloc[i:j]
+                cons_lows = df['low'].iloc[i:j]
+                
+                # Для медвежьего флага — наклон вверх
+                slope = (cons_lows.iloc[-1] - cons_lows.iloc[0]) / cons_lows.iloc[0] / (j - i)
+                
+                if slope < -max_slope_pct:  # наклон вниз — не подходит
+                    continue
+                
+                # Проверяем пробой вниз
+                current_price = df['close'].iloc[-1]
+                breakout_level = cons_lows.min()
+                
+                if current_price < breakout_level:
+                    avg_volume = df['volume'].iloc[i:j].mean()
+                    last_volume = df['volume'].iloc[-1]
+                    volume_ratio = last_volume / avg_volume if avg_volume > 0 else 1
+                    
+                    if volume_ratio < cfg.get('volume_confirmation', 1.3):
+                        continue
+                    
+                    result['has_pattern'] = True
+                    result['type'] = 'bear_flag'
+                    result['direction'] = 'SHORT'
+                    result['entry_price'] = breakout_level
+                    result['pole_pct'] = pole_change * 100
+                    result['strength'] = cfg.get('strength', 65)
+                    result['description'] = f"🚩 МЕДВЕЖИЙ ФЛАГ на {tf_name}: импульс -{pole_change*100:.1f}%, консолидация {j-i} свечей"
+                    return result
+        
+        return result
+
+    def find_wedge(self, df: pd.DataFrame, tf_name: str) -> Dict:
+    """
+    Поиск паттерна Клин (Rising/Falling Wedge)
+    """
+    result = {'has_pattern': False, 'type': None, 'direction': None,
+              'entry_price': 0, 'narrowing_pct': 0, 'strength': 0, 'description': ''}
+    
+    cfg = self.settings.get('wedge', {})
+    if not cfg.get('enabled', True):
+        return result
+    
+    min_bars = cfg.get('min_bars', 10)
+    min_narrowing_pct = cfg.get('min_narrowing_pct', 30.0) / 100
+    
+    # Скользящее окно для поиска клина
+    for start in range(0, len(df) - min_bars):
+        end = min(start + min_bars + 10, len(df))
+        window = df.iloc[start:end]
+        
+        if len(window) < min_bars:
+            continue
+        
+        # Находим локальные максимумы и минимумы в окне
+        highs = []
+        lows = []
+        
+        for i in range(len(window)):
+            if self._is_swing_high(window, i):
+                highs.append((i, window['high'].iloc[i]))
+            if self._is_swing_low(window, i):
+                lows.append((i, window['low'].iloc[i]))
+        
+        if len(highs) < 3 or len(lows) < 3:
+            continue
+        
+        # Линия тренда по максимумам
+        high_slope, high_start = self._calc_trendline(highs)
+        # Линия тренда по минимумам
+        low_slope, low_start = self._calc_trendline(lows)
+        
+        if high_slope is None or low_slope is None:
+            continue
+        
+        # Проверяем, сходятся ли линии
+        slope_diff = abs(high_slope - low_slope)
+        max_slope_diff = cfg.get('max_slope_diff_pct', 0.3) / 100
+        
+        if slope_diff > max_slope_diff:
+            continue
+        
+        # Проверяем сужение диапазона
+        start_width = (high_start - low_start) / low_start
+        end_width = self._get_current_width(window, high_slope, low_slope)
+        narrowing_pct = (start_width - end_width) / start_width
+        
+        if narrowing_pct < min_narrowing_pct:
+            continue
+        
+        # Определяем тип клина
+        current_price = df['close'].iloc[-1]
+        entry_price = None
+        direction = None
+        wedge_type = None
+        
+        # Восходящий клин (линии вверх) → пробой вниз
+        if high_slope > 0 and low_slope > 0:
+            wedge_type = 'rising_wedge'
+            direction = 'SHORT'
+            entry_price = self._get_lower_line_value(highs, lows, len(window))
+            
+            if current_price < entry_price:  # пробой вниз
+                result['has_pattern'] = True
+                result['type'] = 'rising_wedge'
+                result['direction'] = 'SHORT'
+                result['narrowing_pct'] = narrowing_pct * 100
+        
+        # Нисходящий клин (линии вниз) → пробой вверх
+        elif high_slope < 0 and low_slope < 0:
+            wedge_type = 'falling_wedge'
+            direction = 'LONG'
+            entry_price = self._get_upper_line_value(highs, lows, len(window))
+            
+            if current_price > entry_price:  # пробой вверх
+                result['has_pattern'] = True
+                result['type'] = 'falling_wedge'
+                result['direction'] = 'LONG'
+                result['narrowing_pct'] = narrowing_pct * 100
+        
+        if result['has_pattern']:
+            result['entry_price'] = entry_price
+            result['strength'] = cfg.get('strength', 75)
+            wedge_name = "ВОСХОДЯЩИЙ" if wedge_type == 'rising_wedge' else "НИСХОДЯЩИЙ"
+            result['description'] = f"📐 {wedge_name} КЛИН на {tf_name}: сужение {narrowing_pct*100:.0f}%, пробой {direction}"
+            return result
+    
+    return result
+
+    def _calc_trendline(self, points: List[Tuple[int, float]]) -> Tuple[float, float]:
+        """Расчёт линии тренда (наклон и начальное значение)"""
+        if len(points) < 2:
+            return None, None
+        
+        x = [p[0] for p in points]
+        y = [p[1] for p in points]
+        
+        n = len(x)
+        sum_x = sum(x)
+        sum_y = sum(y)
+        sum_xy = sum(x[i] * y[i] for i in range(n))
+        sum_x2 = sum(x[i] ** 2 for i in range(n))
+        
+        denominator = n * sum_x2 - sum_x ** 2
+        if denominator == 0:
+            return None, None
+        
+        slope = (n * sum_xy - sum_x * sum_y) / denominator
+        intercept = (sum_y - slope * sum_x) / n
+        
+        return slope, intercept
+
+    def _get_current_width(self, window: pd.DataFrame, high_slope: float, low_slope: float) -> float:
+        """Текущая ширина клина"""
+        last_idx = len(window) - 1
+        high_value = window['high'].iloc[-1] if len(window) > 0 else 0
+        low_value = window['low'].iloc[-1] if len(window) > 0 else 0
+        return (high_value - low_value) / low_value
+
+    def _get_lower_line_value(self, highs: List, lows: List, current_idx: int) -> float:
+        """Значение нижней линии тренда"""
+        if len(lows) < 2:
+            return 0
+        slope, intercept = self._calc_trendline(lows)
+        if slope is None:
+            return 0
+        return slope * current_idx + intercept
+
+    def _get_upper_line_value(self, highs: List, lows: List, current_idx: int) -> float:
+        """Значение верхней линии тренда"""
+        if len(highs) < 2:
+            return 0
+        slope, intercept = self._calc_trendline(highs)
+        if slope is None:
+            return 0
+        return slope * current_idx + intercept
+
+    def find_head_shoulders(self, df: pd.DataFrame, tf_name: str) -> Dict:
+        """
+        Поиск паттерна Голова и плечи (Head and Shoulders)
+        """
+        result = {'has_pattern': False, 'type': None, 'direction': None,
+                'neckline': 0, 'head_price': 0, 'strength': 0, 'description': ''}
+        
+        cfg = self.settings.get('head_shoulders', {})
+        if not cfg.get('enabled', True):
+            return result
+        
+        min_distance = cfg.get('min_shoulder_distance', 5)
+        max_price_diff = cfg.get('max_price_diff_pct', 1.5) / 100
+        head_mult = cfg.get('head_multiplier', 1.02)
+        head_mult_bottom = cfg.get('head_multiplier_bottom', 0.98)
+        min_neck_touches = cfg.get('min_neck_touches', 2)
+        
+        # Поиск всех локальных экстремумов
+        highs = []
+        lows = []
+        
+        for i in range(min_distance, len(df) - min_distance):
+            if self._is_swing_high(df, i, window=3):
+                highs.append({'idx': i, 'price': df['high'].iloc[i]})
+            if self._is_swing_low(df, i, window=3):
+                lows.append({'idx': i, 'price': df['low'].iloc[i]})
+        
+        if len(highs) < 3:
+            return result
+        
+        # Поиск головы и плечей (SHORT)
+        for i in range(1, len(highs) - 1):
+            left_shoulder = highs[i-1]
+            head = highs[i]
+            right_shoulder = highs[i+1]
+            
+            # Проверяем расстояние между точками
+            if (head['idx'] - left_shoulder['idx'] < min_distance or
+                right_shoulder['idx'] - head['idx'] < min_distance):
+                continue
+            
+            # Голова должна быть выше плеч
+            if not (head['price'] > left_shoulder['price'] * head_mult and
+                    head['price'] > right_shoulder['price'] * head_mult):
+                continue
+            
+            # Плечи должны быть на одном уровне
+            if abs(left_shoulder['price'] - right_shoulder['price']) / left_shoulder['price'] > max_price_diff:
+                continue
+            
+            # Находим линию шеи (минимумы между плечами и головой)
+            neckline_points = []
+            
+            # Минимум между левым плечом и головой
+            left_neck = min(df['low'].iloc[left_shoulder['idx']:head['idx']])
+            neckline_points.append(left_neck)
+            
+            # Минимум между головой и правым плечом
+            right_neck = min(df['low'].iloc[head['idx']:right_shoulder['idx']])
+            neckline_points.append(right_neck)
+            
+            # Усредняем линию шеи
+            neckline = (left_neck + right_neck) / 2
+            
+            # Проверяем, сколько раз цена касалась линии шеи
+            neck_touches = 0
+            for j in range(left_shoulder['idx'], right_shoulder['idx']):
+                if abs(df['low'].iloc[j] - neckline) / neckline < 0.005:  # 0.5% допуск
+                    neck_touches += 1
+            
+            if neck_touches < min_neck_touches:
+                continue
+            
+            # Проверяем пробой линии шеи
+            current_price = df['close'].iloc[-1]
+            
+            if current_price < neckline:  # пробой вниз
+                result['has_pattern'] = True
+                result['type'] = 'head_shoulders'
+                result['direction'] = 'SHORT'
+                result['neckline'] = neckline
+                result['head_price'] = head['price']
+                result['strength'] = cfg.get('strength', 85)
+                result['description'] = f"🧠 ГОЛОВА И ПЛЕЧИ на {tf_name}: шея {neckline:.4f}, цель {head['price'] - (head['price'] - neckline):.4f}"
+                return result
+        
+        # Поиск перевернутой головы и плечей (LONG)
+        if len(lows) < 3:
+            return result
+        
+        for i in range(1, len(lows) - 1):
+            left_shoulder = lows[i-1]
+            head = lows[i]
+            right_shoulder = lows[i+1]
+            
+            if (head['idx'] - left_shoulder['idx'] < min_distance or
+                right_shoulder['idx'] - head['idx'] < min_distance):
+                continue
+            
+            # Голова должна быть ниже плеч
+            if not (head['price'] < left_shoulder['price'] * head_mult_bottom and
+                    head['price'] < right_shoulder['price'] * head_mult_bottom):
+                continue
+            
+            # Плечи должны быть на одном уровне
+            if abs(left_shoulder['price'] - right_shoulder['price']) / left_shoulder['price'] > max_price_diff:
+                continue
+            
+            # Находим линию шеи (максимумы между плечами и головой)
+            neckline_points = []
+            
+            left_neck = max(df['high'].iloc[left_shoulder['idx']:head['idx']])
+            neckline_points.append(left_neck)
+            
+            right_neck = max(df['high'].iloc[head['idx']:right_shoulder['idx']])
+            neckline_points.append(right_neck)
+            
+            neckline = (left_neck + right_neck) / 2
+            
+            neck_touches = 0
+            for j in range(left_shoulder['idx'], right_shoulder['idx']):
+                if abs(df['high'].iloc[j] - neckline) / neckline < 0.005:
+                    neck_touches += 1
+            
+            if neck_touches < min_neck_touches:
+                continue
+            
+            current_price = df['close'].iloc[-1]
+            
+            if current_price > neckline:  # пробой вверх
+                result['has_pattern'] = True
+                result['type'] = 'inverse_head_shoulders'
+                result['direction'] = 'LONG'
+                result['neckline'] = neckline
+                result['head_price'] = head['price']
+                result['strength'] = cfg.get('strength', 85)
+                result['description'] = f"🧠 ПЕРЕВЕРНУТАЯ ГОЛОВА И ПЛЕЧИ на {tf_name}: шея {neckline:.4f}, цель {neckline + (neckline - head['price']):.4f}"
+                return result
+        
+        return result
 
 # ============== ГЕНЕРАТОР ГРАФИКОВ ==============
 
@@ -3346,6 +3895,7 @@ class MultiTimeframeAnalyzer:
         }
         self.stop_hunt_detector = StopHuntDetector()
         self.liquidity_zone_detector = LiquidityZoneDetector()
+        self.pattern_analyzer = PatternAnalyzer()
 
     def set_fibonacci(self, fib_analyzer):
         self.fibonacci = fib_analyzer
@@ -5611,6 +6161,27 @@ class MultiTimeframeAnalyzer:
                 targets[key] = round(targets[key], 2)
         
         logger.info(f"  📈 {symbol} - ATR: {atr}, Цели: {targets}")
+
+        # ===== АНАЛИЗ ПАТТЕРНОВ =====
+        pattern_analysis = None
+        if PATTERN_SETTINGS.get('enabled', True):
+            try:
+                logger.info(f"  🔍 {symbol} - Анализ паттернов")
+                pattern_analysis = self.pattern_analyzer.analyze_multi_timeframe(dataframes)
+                
+                if pattern_analysis['has_pattern']:
+                    for pattern in pattern_analysis['patterns']:
+                        reasons.append(pattern['description'])
+                    confidence += pattern_analysis['strength'] / 5
+                    
+                    # Если паттерн даёт направление — используем его
+                    if pattern_analysis['direction']:
+                        old_dir = direction
+                        direction = pattern_analysis['direction']
+                        logger.info(f"  🎯 Направление от паттерна: {old_dir} → {direction}")
+                        
+            except Exception as e:
+                logger.error(f"❌ Ошибка в анализе паттернов для {symbol}: {e}")
 
         # ===== РАСЧЕТ ЗОН ДОП.ВХОДА =====
         from config import ENTRY_ZONES_SETTINGS
