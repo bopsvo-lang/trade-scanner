@@ -6155,34 +6155,7 @@ class MultiTimeframeAnalyzer:
             else:
                 targets[key] = round(targets[key], 2)
         
-        logger.info(f"  📈 {symbol} - ATR: {atr}, Цели: {targets}")
-
-        # ===== АНАЛИЗ ПАТТЕРНОВ =====
-        pattern_analysis = None
-        if PATTERN_SETTINGS.get('enabled', True):
-            try:
-                logger.info(f"  🔍 {symbol} - Анализ паттернов")
-                pattern_analysis = self.pattern_analyzer.analyze_multi_timeframe(dataframes)
-                
-                if pattern_analysis['has_pattern']:
-                    logger.info(f"  📊 Найдено паттернов: {len(pattern_analysis['patterns'])}")
-                    for pattern in pattern_analysis['patterns']:
-                        logger.info(f"     → {pattern.get('description', 'НЕТ ОПИСАНИЯ')}")
-                        reasons.append(pattern['description'])
-                        logger.info(f"  📝 Добавлена причина от паттерна: {pattern['description']}")
-                    confidence += pattern_analysis['strength'] / 5
-                    
-                    # Если паттерн даёт направление — используем его
-                    if pattern_analysis['direction']:
-                        old_dir = direction
-                        direction = pattern_analysis['direction']
-                        logger.info(f"  🎯 Направление от паттерна: {old_dir} → {direction}")
-                        
-            except Exception as e:
-                logger.error(f"❌ Ошибка в анализе паттернов для {symbol}: {e}")
-
-        # ✅ ЛОГИРОВАНИЕ ПОСЛЕ ПАТТЕРНОВ
-        # logger.info(f"  📊 Все причины ПОСЛЕ паттернов: {reasons}")
+        logger.info(f"  📈 {symbol} - ATR: {atr}, Цели: {targets}")        
 
         # ===== РАСЧЕТ ЗОН ДОП.ВХОДА =====
         from config import ENTRY_ZONES_SETTINGS
@@ -6259,6 +6232,33 @@ class MultiTimeframeAnalyzer:
                 formatted_zones.append(f"{zone_str} ({zone_descriptions[i]})")
             else:
                 formatted_zones.append(zone_str)
+
+        # ===== АНАЛИЗ ПАТТЕРНОВ =====
+        pattern_analysis = None
+        if PATTERN_SETTINGS.get('enabled', True):
+            try:
+                logger.info(f"  🔍 {symbol} - Анализ паттернов")
+                pattern_analysis = self.pattern_analyzer.analyze_multi_timeframe(dataframes)
+                
+                if pattern_analysis['has_pattern']:
+                    logger.info(f"  📊 Найдено паттернов: {len(pattern_analysis['patterns'])}")
+                    for pattern in pattern_analysis['patterns']:
+                        logger.info(f"     → {pattern.get('description', 'НЕТ ОПИСАНИЯ')}")
+                        reasons.append(pattern['description'])
+                        logger.info(f"  📝 Добавлена причина от паттерна: {pattern['description']}")
+                    confidence += pattern_analysis['strength'] / 5
+                    
+                    # Если паттерн даёт направление — используем его
+                    if pattern_analysis['direction']:
+                        old_dir = direction
+                        direction = pattern_analysis['direction']
+                        logger.info(f"  🎯 Направление от паттерна: {old_dir} → {direction}")
+                        
+            except Exception as e:
+                logger.error(f"❌ Ошибка в анализе паттернов для {symbol}: {e}")
+
+        # ✅ ЛОГИРОВАНИЕ ПОСЛЕ ПАТТЕРНОВ
+        # logger.info(f"  📊 Все причины ПОСЛЕ паттернов: {reasons}")
         
         # ✅ НОРМАЛИЗАЦИЯ УВЕРЕННОСТИ
         if confidence > 100:
@@ -8011,7 +8011,7 @@ class MultiExchangeScannerBot:
 
         # ✅ ЛОГИРОВАНИЕ
         logger.info(f"  📊 Причины в памп-сигнале перед отправкой: {signal.get('reasons', [])[:10]}")
-        
+
         coin = self.extract_coin(signal['symbol'])
         current_time = datetime.now()
         
