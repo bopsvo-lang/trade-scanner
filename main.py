@@ -1918,99 +1918,99 @@ class PatternAnalyzer:
         return result
 
     def find_wedge(self, df: pd.DataFrame, tf_name: str) -> Dict:
-    """
-    Поиск паттерна Клин (Rising/Falling Wedge)
-    """
-    result = {'has_pattern': False, 'type': None, 'direction': None,
-              'entry_price': 0, 'narrowing_pct': 0, 'strength': 0, 'description': ''}
-    
-    cfg = self.settings.get('wedge', {})
-    if not cfg.get('enabled', True):
-        return result
-    
-    min_bars = cfg.get('min_bars', 10)
-    min_narrowing_pct = cfg.get('min_narrowing_pct', 30.0) / 100
-    
-    # Скользящее окно для поиска клина
-    for start in range(0, len(df) - min_bars):
-        end = min(start + min_bars + 10, len(df))
-        window = df.iloc[start:end]
+        """
+        Поиск паттерна Клин (Rising/Falling Wedge)
+        """
+        result = {'has_pattern': False, 'type': None, 'direction': None,
+                'entry_price': 0, 'narrowing_pct': 0, 'strength': 0, 'description': ''}
         
-        if len(window) < min_bars:
-            continue
-        
-        # Находим локальные максимумы и минимумы в окне
-        highs = []
-        lows = []
-        
-        for i in range(len(window)):
-            if self._is_swing_high(window, i):
-                highs.append((i, window['high'].iloc[i]))
-            if self._is_swing_low(window, i):
-                lows.append((i, window['low'].iloc[i]))
-        
-        if len(highs) < 3 or len(lows) < 3:
-            continue
-        
-        # Линия тренда по максимумам
-        high_slope, high_start = self._calc_trendline(highs)
-        # Линия тренда по минимумам
-        low_slope, low_start = self._calc_trendline(lows)
-        
-        if high_slope is None or low_slope is None:
-            continue
-        
-        # Проверяем, сходятся ли линии
-        slope_diff = abs(high_slope - low_slope)
-        max_slope_diff = cfg.get('max_slope_diff_pct', 0.3) / 100
-        
-        if slope_diff > max_slope_diff:
-            continue
-        
-        # Проверяем сужение диапазона
-        start_width = (high_start - low_start) / low_start
-        end_width = self._get_current_width(window, high_slope, low_slope)
-        narrowing_pct = (start_width - end_width) / start_width
-        
-        if narrowing_pct < min_narrowing_pct:
-            continue
-        
-        # Определяем тип клина
-        current_price = df['close'].iloc[-1]
-        entry_price = None
-        direction = None
-        wedge_type = None
-        
-        # Восходящий клин (линии вверх) → пробой вниз
-        if high_slope > 0 and low_slope > 0:
-            wedge_type = 'rising_wedge'
-            direction = 'SHORT'
-            entry_price = self._get_lower_line_value(highs, lows, len(window))
-            
-            if current_price < entry_price:  # пробой вниз
-                result['has_pattern'] = True
-                result['type'] = 'rising_wedge'
-                result['direction'] = 'SHORT'
-                result['narrowing_pct'] = narrowing_pct * 100
-        
-        # Нисходящий клин (линии вниз) → пробой вверх
-        elif high_slope < 0 and low_slope < 0:
-            wedge_type = 'falling_wedge'
-            direction = 'LONG'
-            entry_price = self._get_upper_line_value(highs, lows, len(window))
-            
-            if current_price > entry_price:  # пробой вверх
-                result['has_pattern'] = True
-                result['type'] = 'falling_wedge'
-                result['direction'] = 'LONG'
-                result['narrowing_pct'] = narrowing_pct * 100
-        
-        if result['has_pattern']:
-            result['entry_price'] = entry_price
-            result['strength'] = cfg.get('strength', 75)
-            wedge_name = "ВОСХОДЯЩИЙ" if wedge_type == 'rising_wedge' else "НИСХОДЯЩИЙ"
-            result['description'] = f"📐 {wedge_name} КЛИН на {tf_name}: сужение {narrowing_pct*100:.0f}%, пробой {direction}"
+        cfg = self.settings.get('wedge', {})
+        if not cfg.get('enabled', True):
             return result
+        
+        min_bars = cfg.get('min_bars', 10)
+        min_narrowing_pct = cfg.get('min_narrowing_pct', 30.0) / 100
+        
+        # Скользящее окно для поиска клина
+        for start in range(0, len(df) - min_bars):
+            end = min(start + min_bars + 10, len(df))
+            window = df.iloc[start:end]
+            
+            if len(window) < min_bars:
+                continue
+            
+            # Находим локальные максимумы и минимумы в окне
+            highs = []
+            lows = []
+            
+            for i in range(len(window)):
+                if self._is_swing_high(window, i):
+                    highs.append((i, window['high'].iloc[i]))
+                if self._is_swing_low(window, i):
+                    lows.append((i, window['low'].iloc[i]))
+            
+            if len(highs) < 3 or len(lows) < 3:
+                continue
+            
+            # Линия тренда по максимумам
+            high_slope, high_start = self._calc_trendline(highs)
+            # Линия тренда по минимумам
+            low_slope, low_start = self._calc_trendline(lows)
+            
+            if high_slope is None or low_slope is None:
+                continue
+            
+            # Проверяем, сходятся ли линии
+            slope_diff = abs(high_slope - low_slope)
+            max_slope_diff = cfg.get('max_slope_diff_pct', 0.3) / 100
+            
+            if slope_diff > max_slope_diff:
+                continue
+            
+            # Проверяем сужение диапазона
+            start_width = (high_start - low_start) / low_start
+            end_width = self._get_current_width(window, high_slope, low_slope)
+            narrowing_pct = (start_width - end_width) / start_width
+            
+            if narrowing_pct < min_narrowing_pct:
+                continue
+            
+            # Определяем тип клина
+            current_price = df['close'].iloc[-1]
+            entry_price = None
+            direction = None
+            wedge_type = None
+            
+            # Восходящий клин (линии вверх) → пробой вниз
+            if high_slope > 0 and low_slope > 0:
+                wedge_type = 'rising_wedge'
+                direction = 'SHORT'
+                entry_price = self._get_lower_line_value(highs, lows, len(window))
+                
+                if current_price < entry_price:  # пробой вниз
+                    result['has_pattern'] = True
+                    result['type'] = 'rising_wedge'
+                    result['direction'] = 'SHORT'
+                    result['narrowing_pct'] = narrowing_pct * 100
+            
+            # Нисходящий клин (линии вниз) → пробой вверх
+            elif high_slope < 0 and low_slope < 0:
+                wedge_type = 'falling_wedge'
+                direction = 'LONG'
+                entry_price = self._get_upper_line_value(highs, lows, len(window))
+                
+                if current_price > entry_price:  # пробой вверх
+                    result['has_pattern'] = True
+                    result['type'] = 'falling_wedge'
+                    result['direction'] = 'LONG'
+                    result['narrowing_pct'] = narrowing_pct * 100
+            
+            if result['has_pattern']:
+                result['entry_price'] = entry_price
+                result['strength'] = cfg.get('strength', 75)
+                wedge_name = "ВОСХОДЯЩИЙ" if wedge_type == 'rising_wedge' else "НИСХОДЯЩИЙ"
+                result['description'] = f"📐 {wedge_name} КЛИН на {tf_name}: сужение {narrowing_pct*100:.0f}%, пробой {direction}"
+                return result
     
     return result
 
