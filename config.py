@@ -1255,3 +1255,42 @@ STRATEGY_SETTINGS = {
 # Ср-Чт	 require_close_pct = 30	                Проверить FVG
 # Пт-Сб	 min_confluence_levels = 2	            Проверить конфлюенцию
 # Вс	 require_breakout_confirmation = True   Проверить пробой
+
+# ============== НАСТРОЙКИ ПАТТЕРНОВ ==============
+PATTERN_SETTINGS = {
+    'enabled': True,
+    'timeframes': ['current', 'hourly'], # 15м и 1ч ← можно менять
+    # 'timeframes': ['current', '30m', 'hourly', 'four_hourly'],  # расширенный
+    'double_top_bottom': {
+        'enabled': True,
+        'min_distance_bars': 5,
+        'max_price_diff_pct': 1.0,
+        'min_drop_pct': 2.0,
+        'strength': 70,
+    },
+    'flag': {
+        'enabled': True,
+        'min_pole_pct': 3.0,
+        'min_consolidation_bars': 5,
+        'max_consolidation_bars': 15,
+        'max_slope_pct': 0.5,
+        'volume_confirmation': 1.3,
+        'strength': 65,
+    },
+    'wedge': {
+        'enabled': True,
+        'min_bars': 10,
+        'min_narrowing_pct': 30.0,
+        'max_slope_diff_pct': 0.3,
+        'strength': 75,
+    },
+    'head_shoulders': {
+        'enabled': True,
+        'min_shoulder_distance': 5,      # мин свечей между плечами и головой
+        'max_price_diff_pct': 1.5,       # макс отклонение между плечами (1.5%)
+        'head_multiplier': 1.02,         # голова выше плеча на 2% (для SHORT)
+        'head_multiplier_bottom': 0.98,  # голова ниже плеча на 2% (для LONG)
+        'min_neck_touches': 2,           # мин касаний линии шеи
+        'strength': 85,
+    },
+}
