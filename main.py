@@ -6182,7 +6182,7 @@ class MultiTimeframeAnalyzer:
                 logger.error(f"❌ Ошибка в анализе паттернов для {symbol}: {e}")
 
         # ✅ ЛОГИРОВАНИЕ ПОСЛЕ ПАТТЕРНОВ
-        logger.info(f"  📊 Все причины ПОСЛЕ паттернов: {reasons}")
+        # logger.info(f"  📊 Все причины ПОСЛЕ паттернов: {reasons}")
         
         # ===== РАСЧЕТ ЗОН ДОП.ВХОДА =====
         from config import ENTRY_ZONES_SETTINGS
@@ -7330,7 +7330,7 @@ class FastPumpScanner:
         
         # Очистка причин от эмодзи
         clean_reasons = []
-        for reason in signal['reasons'][:10]:
+        for reason in signal['reasons'][:15]:
             clean_reason = reason
             clean_reason = clean_reason.replace("📊 ", "")
             clean_reason = clean_reason.replace("✅ ", "")
