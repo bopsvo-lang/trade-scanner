@@ -6181,6 +6181,9 @@ class MultiTimeframeAnalyzer:
             except Exception as e:
                 logger.error(f"❌ Ошибка в анализе паттернов для {symbol}: {e}")
 
+        # ✅ ЛОГИРОВАНИЕ ПОСЛЕ ПАТТЕРНОВ
+        logger.info(f"  📊 Все причины ПОСЛЕ паттернов: {reasons}")
+        
         # ===== РАСЧЕТ ЗОН ДОП.ВХОДА =====
         from config import ENTRY_ZONES_SETTINGS
         
