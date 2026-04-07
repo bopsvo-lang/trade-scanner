@@ -6988,6 +6988,7 @@ class FastPumpScanner:
         """
         Форматирование памп-сигнала для отправки с ПРАВИЛЬНЫМ направлением
         """
+        logger.info(f"  📊 Все причины перед фильтром: {signal.get('reasons', [])}")
         
         logger.info(f"  📊 format_pump_message START: направление до изменений = {signal.get('direction')}")
 
