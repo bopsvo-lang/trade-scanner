@@ -5988,14 +5988,9 @@ class MultiTimeframeAnalyzer:
                 reasons.append(f"⚠️ {fvg_below} {zone_word} FVG снизу (поддержка)")
                 confidence -= fvg_below * 3
         
-        logger.info(f"  🎯 [4] Направление после FVG анализа: {direction}")
+        logger.info(f"  🎯 [4] Направление после FVG анализа: {direction}")      
         
-        # ✅ НОРМАЛИЗАЦИЯ УВЕРЕННОСТИ
-        if confidence > 100:
-            confidence = min(100, confidence)
-            logger.info(f"  📊 Нормализована уверенность: {confidence:.1f}%")
-
-         # ПОТОМ ВЫВОДИМ ЛОГ (уже с нормализованной уверенностью)
+        # ПОТОМ ВЫВОДИМ ЛОГ (уже с нормализованной уверенностью)
         logger.info(f"  📊 {symbol} - Направление: {direction}, Уверенность: {confidence}")
         
         if direction == 'NEUTRAL':
@@ -6170,7 +6165,9 @@ class MultiTimeframeAnalyzer:
                 pattern_analysis = self.pattern_analyzer.analyze_multi_timeframe(dataframes)
                 
                 if pattern_analysis['has_pattern']:
+                    logger.info(f"  📊 Найдено паттернов: {len(pattern_analysis['patterns'])}")
                     for pattern in pattern_analysis['patterns']:
+                        logger.info(f"     → {pattern.get('description', 'НЕТ ОПИСАНИЯ')}")
                         reasons.append(pattern['description'])
                     confidence += pattern_analysis['strength'] / 5
                     
@@ -6259,6 +6256,11 @@ class MultiTimeframeAnalyzer:
             else:
                 formatted_zones.append(zone_str)
         
+        # ✅ НОРМАЛИЗАЦИЯ УВЕРЕННОСТИ
+        if confidence > 100:
+            confidence = min(100, confidence)
+            logger.info(f"  📊 Нормализована уверенность: {confidence:.1f}%")
+
         # ===== ФОРМИРОВАНИЕ РЕЗУЛЬТАТА =====
         result = {
             'symbol': symbol,
