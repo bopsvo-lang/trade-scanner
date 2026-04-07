@@ -7327,7 +7327,7 @@ class FastPumpScanner:
         
         # Очистка причин от эмодзи
         clean_reasons = []
-        for reason in signal['reasons'][:6]:
+        for reason in signal['reasons'][:10]:
             clean_reason = reason
             clean_reason = clean_reason.replace("📊 ", "")
             clean_reason = clean_reason.replace("✅ ", "")
