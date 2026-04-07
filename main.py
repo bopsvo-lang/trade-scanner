@@ -8011,6 +8011,7 @@ class MultiExchangeScannerBot:
 
         # ✅ ЛОГИРОВАНИЕ
         logger.info(f"  📊 Причины в памп-сигнале перед отправкой: {signal.get('reasons', [])[:10]}")
+        
         coin = self.extract_coin(signal['symbol'])
         current_time = datetime.now()
         
