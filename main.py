@@ -2012,7 +2012,7 @@ class PatternAnalyzer:
                 result['description'] = f"📐 {wedge_name} КЛИН на {tf_name}: сужение {narrowing_pct*100:.0f}%, пробой {direction}"
                 return result
     
-    return result
+        return result
 
     def _calc_trendline(self, points: List[Tuple[int, float]]) -> Tuple[float, float]:
         """Расчёт линии тренда (наклон и начальное значение)"""
