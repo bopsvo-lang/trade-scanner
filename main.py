@@ -6258,7 +6258,7 @@ class MultiTimeframeAnalyzer:
                 logger.error(f"❌ Ошибка в анализе паттернов для {symbol}: {e}")
 
         # ✅ ЛОГИРОВАНИЕ ПОСЛЕ ПАТТЕРНОВ
-        # logger.info(f"  📊 Все причины ПОСЛЕ паттернов: {reasons}")
+        logger.info(f"  📊 Все причины ПОСЛЕ паттернов: {reasons}")
         
         # ✅ НОРМАЛИЗАЦИЯ УВЕРЕННОСТИ
         if confidence > 100:
