@@ -5434,25 +5434,19 @@ class MultiTimeframeAnalyzer:
                 logger.debug(f"Ошибка анализа наклонных на 15м: {e}")
 
         # ===== ПРОВЕРКА СТРАТЕГИИ: ТРЕБОВАНИЕ ПРОБОЯ =====
-        logger.info(f"  🔍 {symbol} - Проверка стратегии: require_breakout_confirmation={strategy['require_breakout_confirmation']}, breakout_confirmed={breakout_confirmed}")
         if strategy['require_breakout_confirmation']:
             if not breakout_confirmed:
-                # Определяем тип уровня, если есть информация
-                level_type = "неизвестного типа"
-                tf_name = TIMEFRAMES.get('current', '15м')
+                # Определяем направление ожидаемого пробоя
+                if direction == 'LONG':
+                    expected_breakout = "вверх"
+                elif direction == 'SHORT':
+                    expected_breakout = "вниз"
+                else:
+                    expected_breakout = "неизвестно"
                 
-                # Пытаемся определить из последних причин
-                for r in reversed(reasons):
-                    if "поддержк" in r or "сопротивл" in r:
-                        if "поддержк" in r:
-                            level_type = "ПОДДЕРЖКИ"
-                        else:
-                            level_type = "СОПРОТИВЛЕНИЯ"
-                        break
-                
-                reasons.append(f"⏳ {strategy['name']} стратегия: ждем ПРОБОЯ уровня {level_type} на {tf_name}")
+                reasons.append(f"⏳ {strategy['name']} стратегия: ждем ПРОБОЯ {expected_breakout} на 15m")
                 direction = 'NEUTRAL'
-                logger.info(f"  ⏳ {symbol} - Сигнал отменен: требуется подтверждение пробоя")
+                logger.info(f"  ⏳ {symbol} - Сигнал отменен: требуется подтверждение пробоя {expected_breakout}")
 
         # ===== АНАЛИЗ КОНВЕРГЕНЦИИ УРОВНЕЙ =====
         if FEATURES['advanced']['patterns']:
