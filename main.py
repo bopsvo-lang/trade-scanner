@@ -6244,7 +6244,7 @@ class MultiTimeframeAnalyzer:
                     logger.info(f"  📊 Найдено паттернов: {len(pattern_analysis['patterns'])}")
                     for pattern in pattern_analysis['patterns']:
                         logger.info(f"     → {pattern.get('description', 'НЕТ ОПИСАНИЯ')}")
-                        reasons.append(pattern['description'])
+                        reasons.insert(0, pattern['description'])
                         logger.info(f"  📝 Добавлена причина от паттерна: {pattern['description']}")
                     confidence += pattern_analysis['strength'] / 5
                     
