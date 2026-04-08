@@ -1665,19 +1665,29 @@ class PatternAnalyzer:
         self.tolerance = self.settings.get('double_top_bottom', {}).get('max_price_diff_pct', 1.0) / 100
     
     def _apply_aging(self, result: Dict, age_bars: int, df: pd.DataFrame = None, 
-                    pattern_type: str = None, idx1: int = None, idx2: int = None) -> Dict:
+                    pattern_type: str = None, idx1: int = None, idx2: int = None, 
+                    tf_name: str = None) -> Dict:
         """
-        Применяет мягкую инвалидацию к паттерну:
-        - Снижает силу в зависимости от возраста
-        - Добавляет предупреждения в описание
-        - Проверяет ложные пробои
+        Применяет мягкую инвалидацию к паттерну
         """
         if not result.get('has_pattern'):
             return result
         
-        max_age = self.settings.get('max_age_bars', 50)
-        reduce_after = self.settings.get('reduce_strength_after', 25)
+        # Получаем настройки (могут быть числом или словарём)
+        max_age_config = self.settings.get('max_age_bars', 50)
+        reduce_after_config = self.settings.get('reduce_strength_after', 25)
         reduce_factor = self.settings.get('reduce_factor', 0.5)
+        
+        # Определяем значения для текущего ТФ
+        if isinstance(max_age_config, dict) and tf_name:
+            max_age = max_age_config.get(tf_name, 50)
+        else:
+            max_age = max_age_config
+        
+        if isinstance(reduce_after_config, dict) and tf_name:
+            reduce_after = reduce_after_config.get(tf_name, 25)
+        else:
+            reduce_after = reduce_after_config
         
         original_strength = result.get('original_strength', result['strength'])
         
@@ -1688,30 +1698,27 @@ class PatternAnalyzer:
         elif age_bars > reduce_after:
             # Снижаем силу
             result['strength'] = int(original_strength * reduce_factor)
-            result['description'] += f" ⏳ (устаревает, {age_bars} свечей)"
+            result['description'] += f" ⏳ (устаревает, {age_bars} св)"
         elif age_bars > reduce_after // 2:
             result['strength'] = int(original_strength * 0.75)
-            result['description'] += f" ⏳ (стареет, {age_bars} свечей)"
+            result['description'] += f" ⏳ (стареет, {age_bars} св)"
         
         # 2. Проверка на ложный пробой (для двойной вершины/дна)
         if pattern_type in ['double_top', 'double_bottom'] and df is not None and idx1 is not None and idx2 is not None:
             if pattern_type == 'double_top':
-                # Линия шеи — минимум между вершинами
                 neckline = min(df['low'].iloc[idx1:idx2])
-                # Проверяем, не было ли ложного пробоя вверх
                 recent_highs = df['high'].tail(5)
                 if any(h > neckline * 1.01 for h in recent_highs):
                     result['strength'] = int(result['strength'] * 0.7)
-                    result['description'] += " ⚠️ (ложный пробой?)"
-            else:  # double_bottom
-                # Линия шеи — максимум между впадинами
+                    result['description'] += " ⚠️ (ложный?)"
+            else:
                 neckline = max(df['high'].iloc[idx1:idx2])
                 recent_lows = df['low'].tail(5)
                 if any(l < neckline * 0.99 for l in recent_lows):
                     result['strength'] = int(result['strength'] * 0.7)
-                    result['description'] += " ⚠️ (ложный пробой?)"
+                    result['description'] += " ⚠️ (ложный?)"
         
-        # 3. Сохраняем возраст в результат
+        # 3. Сохраняем возраст
         result['age_bars'] = age_bars
         result['original_strength'] = original_strength
         
@@ -1763,7 +1770,7 @@ class PatternAnalyzer:
                 result['description'] = f"🔻 ДВОЙНАЯ ВЕРШИНА на {tf_name}: {highs[i]:.4f}"
                 # Рассчитываем возраст паттерна
                 age_bars = len(df) - j  # j - индекс второй вершины
-                result = self._apply_aging(result, age_bars, df, result['type'], i, j)
+                result = self._apply_aging(result, age_bars, df, result['type'], i, j, tf_name)
                 return result
         
         # Поиск двойного дна
@@ -1793,7 +1800,7 @@ class PatternAnalyzer:
                 result['description'] = f"🟢 ДВОЙНОЕ ДНО на {tf_name}: {lows[i]:.4f}"
                 # Рассчитываем возраст паттерна
                 age_bars = len(df) - j  # j - индекс второго дна
-                result = self._apply_aging(result, age_bars, df, result['type'], i, j)
+                result = self._apply_aging(result, age_bars, df, result['type'], i, j, tf_name)
                 return result
         
         return result
@@ -1942,7 +1949,7 @@ class PatternAnalyzer:
                     
                     # Рассчитываем возраст паттерна
                     age_bars = len(df) - j  # j - индекс пробоя
-                    result = self._apply_aging(result, age_bars)
+                    result = self._apply_aging(result, age_bars, tf_name=tf_name)
                     return result
         
         # Поиск медвежьего флага (SHORT)
@@ -1990,7 +1997,7 @@ class PatternAnalyzer:
                     
                     # Рассчитываем возраст паттерна
                     age_bars = len(df) - j  # j - индекс пробоя
-                    result = self._apply_aging(result, age_bars)
+                    result = self._apply_aging(result, age_bars, tf_name=tf_name)
                     return result
         
         return result
