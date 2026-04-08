@@ -1259,8 +1259,22 @@ STRATEGY_SETTINGS = {
 # ============== НАСТРОЙКИ ПАТТЕРНОВ ==============
 PATTERN_SETTINGS = {
     'enabled': True,
-    'timeframes': ['current', 'hourly'], # 15м и 1ч ← можно менять
+    'timeframes': ['5m', '3m', 'current', 'hourly'],  # ← 3м, 5м, 15м, 1ч
     # 'timeframes': ['current', '30m', 'hourly', 'four_hourly'],  # расширенный
+    'max_age_bars': {
+        '5m': 15,                   # 15 свечей = 75 мин    если 15 свечей (для 5м = 75 мин, для 3м = 45 мин, для 15м = 225 мин)
+        '3m': 15,                   # 15 свечей = 45 мин
+        'current': 20,              # 20 свечей = 5 часов
+        'hourly': 12,               # 12 свечей = 12 часов
+    },
+    'reduce_strength_after': {
+        '5m': 8,                    # Начинаем снижать силу после 25 свечей    
+        '3m': 8,
+        'current': 10,
+        'hourly': 6,
+    },
+    'reduce_factor': 0.5,           # Коэффициент снижения силы (50%)
+    
     'double_top_bottom': {
         'enabled': True,
         'min_distance_bars': 5,
@@ -1286,11 +1300,11 @@ PATTERN_SETTINGS = {
     },
     'head_shoulders': {
         'enabled': True,
-        'min_shoulder_distance': 5,      # мин свечей между плечами и головой
-        'max_price_diff_pct': 1.5,       # макс отклонение между плечами (1.5%)
-        'head_multiplier': 1.02,         # голова выше плеча на 2% (для SHORT)
-        'head_multiplier_bottom': 0.98,  # голова ниже плеча на 2% (для LONG)
-        'min_neck_touches': 2,           # мин касаний линии шеи
+        'min_shoulder_distance': 5,
+        'max_price_diff_pct': 1.5,
+        'head_multiplier': 1.02,
+        'head_multiplier_bottom': 0.98,
+        'min_neck_touches': 2,
         'strength': 85,
     },
 }
