@@ -1997,6 +1997,7 @@ class PatternAnalyzer:
                     
                     # Рассчитываем возраст паттерна
                     age_bars = len(df) - j  # j - индекс пробоя
+                    result['age_bars'] = age_bars
                     result = self._apply_aging(result, age_bars, tf_name=tf_name)
                     return result
         
@@ -2095,6 +2096,11 @@ class PatternAnalyzer:
                 result['strength'] = cfg.get('strength', 75)
                 wedge_name = "ВОСХОДЯЩИЙ" if wedge_type == 'rising_wedge' else "НИСХОДЯЩИЙ"
                 result['description'] = f"📐 {wedge_name} КЛИН на {tf_name}: сужение {narrowing_pct*100:.0f}%, пробой {direction}"
+                
+                # Рассчитываем возраст паттерна
+                age_bars = len(df) - end  # используйте нужный индекс
+                result['age_bars'] = age_bars
+                result = self._apply_aging(result, age_bars, tf_name=tf_name)
                 return result
     
         return result
@@ -2231,6 +2237,11 @@ class PatternAnalyzer:
                 result['head_price'] = head['price']
                 result['strength'] = cfg.get('strength', 85)
                 result['description'] = f"🧠 ГОЛОВА И ПЛЕЧИ на {tf_name}: шея {neckline:.4f}, цель {head['price'] - (head['price'] - neckline):.4f}"
+                
+                # Рассчитываем возраст паттерна
+                age_bars = len(df) - right_shoulder['idx']
+                result['age_bars'] = age_bars
+                result = self._apply_aging(result, age_bars, tf_name=tf_name)
                 return result
         
         # Поиск перевернутой головы и плечей (LONG)
@@ -2284,6 +2295,11 @@ class PatternAnalyzer:
                 result['head_price'] = head['price']
                 result['strength'] = cfg.get('strength', 85)
                 result['description'] = f"🧠 ПЕРЕВЕРНУТАЯ ГОЛОВА И ПЛЕЧИ на {tf_name}: шея {neckline:.4f}, цель {neckline + (neckline - head['price']):.4f}"
+                
+                # Рассчитываем возраст паттерна
+                age_bars = len(df) - right_shoulder['idx']  # индекс правого плеча
+                result['age_bars'] = age_bars
+                result = self._apply_aging(result, age_bars, tf_name=tf_name)
                 return result
         
         return result
