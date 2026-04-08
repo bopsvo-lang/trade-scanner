@@ -1819,13 +1819,18 @@ class PatternAnalyzer:
         result = {'has_pattern': False, 'patterns': [], 'strength': 0, 'direction': None}
         
         timeframes = self.settings.get('timeframes', ['current', 'hourly'])
-        max_age = self.settings.get('max_age_bars', 50)
+        
+        # Получаем настройки возраста (могут быть числом или словарём)
+        max_age_config = self.settings.get('max_age_bars', 50)
+        reduce_after_config = self.settings.get('reduce_strength_after', 25)
         
         tf_short = {
             'current': '15м',
             'hourly': '1ч',
             'four_hourly': '4ч',
             'daily': '1д',
+            '5m': '5м',
+            '3m': '3м',
         }
         
         for tf_name in timeframes:
@@ -1833,6 +1838,12 @@ class PatternAnalyzer:
                 continue
             
             df = dataframes[tf_name]
+            
+            # Определяем max_age для этого ТФ
+            if isinstance(max_age_config, dict):
+                max_age = max_age_config.get(tf_name, 20)
+            else:
+                max_age = max_age_config
             
             # Двойная вершина/дно
             pattern = self.find_double_top_bottom(df, tf_short.get(tf_name, tf_name))
