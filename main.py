@@ -5046,6 +5046,10 @@ class MultiTimeframeAnalyzer:
         alignment = self.analyze_timeframe_alignment(dataframes)
         logger.info(f"  📊 {symbol} - Согласованность трендов: {alignment['trend_alignment']}%")
 
+        # ✅ ВСТАВИТЬ СЮДА
+        if alignment['trend_alignment'] < 30:
+            reasons.append(f"⚠️ Низкая согласованность ТФ ({alignment['trend_alignment']:.0f}%) — возможен разворот")
+
         # ===== ОБЪЯВЛЯЕМ ПЕРЕМЕННЫЕ =====
         confidence = 50
         reasons = []
@@ -6333,7 +6337,9 @@ class MultiTimeframeAnalyzer:
         if PATTERN_SETTINGS.get('enabled', True):
             try:
                 logger.info(f"  🔍 {symbol} - Анализ паттернов")
+                logger.info(f"  🔍 ПАТТЕРНЫ: вызываю analyze_multi_timeframe для {symbol}")
                 pattern_analysis = self.pattern_analyzer.analyze_multi_timeframe(dataframes)
+                logger.info(f"  🔍 ПАТТЕРНЫ: результат has_pattern={pattern_analysis.get('has_pattern')}")
                 
                 if pattern_analysis['has_pattern']:
                     logger.info(f"  📊 Найдено паттернов: {len(pattern_analysis['patterns'])}")
@@ -7397,6 +7403,32 @@ class FastPumpScanner:
 
         # Форматирование целей
         if signal.get('target_1') and signal.get('target_2') and signal.get('stop_loss'):
+            # ✅ ЗАЩИТА ОТ НЕПРАВИЛЬНЫХ ЦЕЛЕЙ
+            current_price = signal['price']
+            direction = signal['direction']
+            
+            # Для SHORT цели должны быть ниже цены, стоп - выше
+            if 'SHORT' in direction:
+                if signal['target_1'] > current_price or signal['target_2'] > current_price:
+                    logger.warning(f"  ⚠️ Неправильные цели для SHORT: цели выше цены. Меняем местами со стопом")
+                    # Меняем местами цели и стоп
+                    temp_t1 = signal['target_1']
+                    temp_t2 = signal['target_2']
+                    temp_sl = signal['stop_loss']
+                    signal['target_1'] = temp_sl
+                    signal['target_2'] = temp_sl - (temp_t1 - temp_sl)  # примерная вторая цель
+                    signal['stop_loss'] = temp_t1
+            
+            # Для LONG цели должны быть выше цены, стоп - ниже
+            if 'LONG' in direction:
+                if signal['target_1'] < current_price or signal['target_2'] < current_price:
+                    logger.warning(f"  ⚠️ Неправильные цели для LONG: цели ниже цены. Меняем местами со стопом")
+                    temp_t1 = signal['target_1']
+                    temp_t2 = signal['target_2']
+                    temp_sl = signal['stop_loss']
+                    signal['target_1'] = temp_sl
+                    signal['target_2'] = temp_sl + (temp_sl - temp_t1)
+                    signal['stop_loss'] = temp_t1
             def format_target(price):
                 if price < 0.00001:
                     return f"{price:.8f}".rstrip('0').rstrip('.')
@@ -7808,8 +7840,34 @@ class MultiExchangeScannerBot:
             pump_line = f"📈 Рост: {start_formatted} → {price_formatted} за {pump_data.get('time_window', 0):.0f}с"
             lines.append(pump_line)
         
-        # Цели
+       # Цели
         if signal.get('target_1') and signal.get('target_2') and signal.get('stop_loss'):
+            # ✅ ЗАЩИТА ОТ НЕПРАВИЛЬНЫХ ЦЕЛЕЙ
+            current_price = signal['price']
+            direction = signal['direction']
+            
+            # Для SHORT цели должны быть ниже цены, стоп - выше
+            if 'SHORT' in direction:
+                if signal['target_1'] > current_price or signal['target_2'] > current_price:
+                    logger.warning(f"  ⚠️ Неправильные цели для SHORT: цели выше цены. Меняем местами со стопом")
+                    # Меняем местами цели и стоп
+                    temp_t1 = signal['target_1']
+                    temp_t2 = signal['target_2']
+                    temp_sl = signal['stop_loss']
+                    signal['target_1'] = temp_sl
+                    signal['target_2'] = temp_sl - (temp_t1 - temp_sl)  # примерная вторая цель
+                    signal['stop_loss'] = temp_t1
+            
+            # Для LONG цели должны быть выше цены, стоп - ниже
+            if 'LONG' in direction:
+                if signal['target_1'] < current_price or signal['target_2'] < current_price:
+                    logger.warning(f"  ⚠️ Неправильные цели для LONG: цели ниже цены. Меняем местами со стопом")
+                    temp_t1 = signal['target_1']
+                    temp_t2 = signal['target_2']
+                    temp_sl = signal['stop_loss']
+                    signal['target_1'] = temp_sl
+                    signal['target_2'] = temp_sl + (temp_sl - temp_t1)
+                    signal['stop_loss'] = temp_t1
             def format_target(p):
                 if p < 0.00001:
                     return f"{p:.8f}".rstrip('0').rstrip('.')
