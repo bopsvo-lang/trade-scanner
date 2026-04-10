@@ -2593,37 +2593,55 @@ class SmartMoneyAnalyzer:
         self.order_blocks = []
         self.fair_value_gaps = []
         
-    def find_order_blocks(self, df: pd.DataFrame) -> List[Dict]:
-        order_blocks = []
+    def find_order_blocks_improved(self, df: pd.DataFrame, tf_name: str) -> List[Dict]:
+        """
+        Улучшенный поиск ордер-блоков с фильтром по ATR
+        Как в индикаторе SMC
+        """
+        blocks = []
+        
+        # Расчёт ATR для фильтра
+        atr = df['atr'].iloc[-1] if 'atr' in df.columns else (df['high'] - df['low']).mean()
+        
         for i in range(10, len(df) - 5):
-            price_move_forward = (df['close'].iloc[i+2] - df['close'].iloc[i]) / df['close'].iloc[i] * 100
+            # Движение цены
+            price_move = (df['close'].iloc[i+2] - df['close'].iloc[i]) / df['close'].iloc[i] * 100
             
-            if abs(price_move_forward) > 2.0:
-                if price_move_forward > 0:
-                    for j in range(i, max(0, i-5), -1):
-                        if df['close'].iloc[j] < df['open'].iloc[j]:
-                            strength = min(100, abs(price_move_forward) * 15)
-                            order_blocks.append({
-                                'type': 'bullish',
-                                'price_min': df['low'].iloc[j],
-                                'price_max': df['high'].iloc[j],
-                                'strength': strength,
-                                'description': f"Бычий ордер-блок ({strength:.0f}%)"
-                            })
-                            break
-                elif price_move_forward < 0:
-                    for j in range(i, max(0, i-5), -1):
-                        if df['close'].iloc[j] > df['open'].iloc[j]:
-                            strength = min(100, abs(price_move_forward) * 15)
-                            order_blocks.append({
-                                'type': 'bearish',
-                                'price_min': df['low'].iloc[j],
-                                'price_max': df['high'].iloc[j],
-                                'strength': strength,
-                                'description': f"Медвежий ордер-блок ({strength:.0f}%)"
-                            })
-                            break
-        return order_blocks[-20:]
+            if abs(price_move) < 2.0:
+                continue
+            
+            # Фильтр по волатильности (пропускаем слишком широкие свечи)
+            candle_range = df['high'].iloc[i] - df['low'].iloc[i]
+            if candle_range > 2 * atr:
+                continue
+            
+            if price_move > 0:  # Бычий OB
+                # Ищем последнюю красную свечу перед импульсом
+                for j in range(i, max(0, i-5), -1):
+                    if df['close'].iloc[j] < df['open'].iloc[j]:
+                        blocks.append({
+                            'type': 'bullish',
+                            'price_min': df['low'].iloc[j],
+                            'price_max': df['high'].iloc[j],
+                            'strength': min(100, abs(price_move) * 12),
+                            'timeframe': tf_name,
+                            'description': f"📦 Бычий OB на {tf_name}: {df['low'].iloc[j]:.4f}-{df['high'].iloc[j]:.4f}"
+                        })
+                        break
+            else:  # Медвежий OB
+                for j in range(i, max(0, i-5), -1):
+                    if df['close'].iloc[j] > df['open'].iloc[j]:
+                        blocks.append({
+                            'type': 'bearish',
+                            'price_min': df['low'].iloc[j],
+                            'price_max': df['high'].iloc[j],
+                            'strength': min(100, abs(price_move) * 12),
+                            'timeframe': tf_name,
+                            'description': f"📦 Медвежий OB на {tf_name}: {df['low'].iloc[j]:.4f}-{df['high'].iloc[j]:.4f}"
+                        })
+                        break
+        
+        return blocks[:5]  # последние 5 блоков
     
     def find_fair_value_gaps(self, df: pd.DataFrame) -> List[Dict]:
         fvg_list = []
@@ -2674,6 +2692,166 @@ class SmartMoneyAnalyzer:
                 result['has_signal'] = True
                 result['signals'].append(f"📐 FVG: {fvg['description']}")
                 result['strength'] = max(result['strength'], fvg['strength'])
+        
+        return result
+
+    def detect_choch(self, df: pd.DataFrame, tf_name: str) -> Dict:
+        """
+        Детектор CHoCH (Change of Character) - смена тренда
+        Как в индикаторе SMC
+        """
+        result = {
+            'has_choch': False,
+            'direction': None,
+            'strength': 0,
+            'description': '',
+            'timeframe': tf_name
+        }
+        
+        # Находим локальные экстремумы
+        highs = []
+        lows = []
+        window = 5
+        
+        for i in range(window, len(df) - window):
+            if self._is_swing_high(df, i, window):
+                highs.append({'idx': i, 'price': df['high'].iloc[i]})
+            if self._is_swing_low(df, i, window):
+                lows.append({'idx': i, 'price': df['low'].iloc[i]})
+        
+        if len(highs) < 2 or len(lows) < 2:
+            return result
+        
+        # Получаем последние два экстремума
+        last_high = highs[-1]['price']
+        prev_high = highs[-2]['price']
+        last_low = lows[-1]['price']
+        prev_low = lows[-2]['price']
+        
+        current_price = df['close'].iloc[-1]
+        
+        # CHoCH вверх (смена тренда с нисходящего на восходящий)
+        if current_price > prev_high and last_high < prev_high:
+            result['has_choch'] = True
+            result['direction'] = 'LONG'
+            result['strength'] = 85
+            result['description'] = f"🔄 CHoCH (смена тренда) на {tf_name}: пробой уровня {prev_high:.4f}"
+            return result
+        
+        # CHoCH вниз (смена тренда с восходящего на нисходящий)
+        elif current_price < prev_low and last_low > prev_low:
+            result['has_choch'] = True
+            result['direction'] = 'SHORT'
+            result['strength'] = 85
+            result['description'] = f"🔄 CHoCH (смена тренда) на {tf_name}: пробой уровня {prev_low:.4f}"
+            return result
+        
+        return result
+
+    def calculate_premium_discount_zones(self, df: pd.DataFrame, tf_name: str) -> Dict:
+        """
+        Расчёт Premium/Discount/Equilibrium зон как в SMC
+        """
+        result = {
+            'has_zone': False,
+            'zone_type': None,
+            'direction': None,
+            'premium': 0,
+            'discount': 0,
+            'equilibrium': 0,
+            'description': ''
+        }
+        
+        lookback = min(100, len(df))
+        swing_high = df['high'].tail(lookback).max()
+        swing_low = df['low'].tail(lookback).min()
+        
+        if swing_high == swing_low:
+            return result
+        
+        current_price = df['close'].iloc[-1]
+        
+        # Расчёт зон (как в индикаторе SMC)
+        premium_zone = swing_high * 0.95 + swing_low * 0.05
+        discount_zone = swing_low * 0.95 + swing_high * 0.05
+        equilibrium = (swing_high + swing_low) / 2
+        
+        result['premium'] = premium_zone
+        result['discount'] = discount_zone
+        result['equilibrium'] = equilibrium
+        
+        # Определяем зону
+        if current_price > premium_zone:
+            result['has_zone'] = True
+            result['zone_type'] = 'premium'
+            result['direction'] = 'SHORT'
+            result['description'] = f"📊 Premium Zone на {tf_name}: цена {current_price:.4f} (перекупленность)"
+        elif current_price < discount_zone:
+            result['has_zone'] = True
+            result['zone_type'] = 'discount'
+            result['direction'] = 'LONG'
+            result['description'] = f"📊 Discount Zone на {tf_name}: цена {current_price:.4f} (перепроданность)"
+        elif abs(current_price - equilibrium) / equilibrium * 100 < 1.0:
+            result['has_zone'] = True
+            result['zone_type'] = 'equilibrium'
+            result['direction'] = None
+            result['description'] = f"⚖️ Equilibrium Zone на {tf_name}: цена {current_price:.4f} (равновесие, возможна цель)"
+        
+        return result
+
+    def find_equal_highs_lows(self, df: pd.DataFrame, tf_name: str) -> Dict:
+        """
+        Поиск равных максимумов (EQH) и равных минимумов (EQL)
+        Это уровни, где толпа держит стоп-лоссы
+        """
+        result = {
+            'has_equal': False,
+            'type': None,
+            'price': 0,
+            'strength': 0,
+            'description': ''
+        }
+        
+        threshold_pct = 0.1  # 0.1% допуск (как в индикаторе)
+        confirmation_bars = 3  # бар для подтверждения
+        
+        # Поиск равных максимумов (EQH)
+        highs = df['high'].values
+        for i in range(confirmation_bars, len(highs) - confirmation_bars):
+            current_high = highs[i]
+            
+            # Ищем похожий максимум в прошлом
+            for j in range(i - confirmation_bars, max(0, i - 50), -1):
+                prev_high = highs[j]
+                diff_pct = abs(current_high - prev_high) / prev_high * 100
+                
+                if diff_pct <= threshold_pct:
+                    # Проверяем подтверждение
+                    if all(h < current_high for h in highs[i+1:i+confirmation_bars+1]):
+                        result['has_equal'] = True
+                        result['type'] = 'EQH'
+                        result['price'] = current_high
+                        result['strength'] = 70
+                        result['description'] = f"📐 EQH (Equal High) на {tf_name}: {current_high:.4f} — уровень ликвидности"
+                        return result
+        
+        # Поиск равных минимумов (EQL)
+        lows = df['low'].values
+        for i in range(confirmation_bars, len(lows) - confirmation_bars):
+            current_low = lows[i]
+            
+            for j in range(i - confirmation_bars, max(0, i - 50), -1):
+                prev_low = lows[j]
+                diff_pct = abs(current_low - prev_low) / prev_low * 100
+                
+                if diff_pct <= threshold_pct:
+                    if all(l > current_low for l in lows[i+1:i+confirmation_bars+1]):
+                        result['has_equal'] = True
+                        result['type'] = 'EQL'
+                        result['price'] = current_low
+                        result['strength'] = 70
+                        result['description'] = f"📐 EQL (Equal Low) на {tf_name}: {current_low:.4f} — уровень ликвидности"
+                        return result
         
         return result
 
@@ -3970,6 +4148,190 @@ class MultiExchangeFetcher:
     async def close(self):
         await self.exchange.close()
 
+class SMCFvgAnalyzer:
+    """
+    Анализатор Fair Value Gaps как в индикаторе Smart Money Concepts
+    """
+    
+    def __init__(self, settings: Dict = None):
+        from config import FVG_SETTINGS
+        self.settings = settings or FVG_SETTINGS
+    
+    def analyze(self, df: pd.DataFrame, tf_name: str) -> Dict:
+        """
+        Анализ FVG на одном таймфрейме
+        """
+        result = {
+            'has_fvg': False,
+            'zones': [],
+            'signals': [],
+            'strength': 0
+        }
+        
+        mode = self.settings.get('mode', 'advanced')
+        min_gap_size = self.settings.get('min_gap_size_pct', 0.3)
+        
+        # Расчёт автоматического порога (только для advanced режима)
+        threshold = 0
+        if mode == 'advanced' and self.settings.get('use_threshold', True):
+            lookback = self.settings.get('threshold_lookback', 50)
+            delta_changes = (df['close'] - df['open']).abs()
+            cumulative_delta = delta_changes.rolling(lookback).sum() / lookback
+            multiplier = self.settings.get('threshold_multiplier', 0.5)
+            threshold = cumulative_delta.iloc[-1] * multiplier if len(cumulative_delta) > 0 else 0
+        
+        # Поиск FVG
+        for i in range(2, len(df) - 1):
+            candle1 = df.iloc[i-2]
+            candle2 = df.iloc[i-1]
+            candle3 = df.iloc[i]
+            
+            current_close = candle3['close']
+            prev_close = candle2['close']
+            
+            # Процент изменения свечи (barDeltaPercent)
+            bar_delta = abs(current_close - prev_close) / prev_close * 100 if prev_close > 0 else 0
+            
+            # Бычий FVG
+            if candle3['low'] > candle1['high']:
+                # Применяем фильтры
+                if not self._should_include_fvg(mode, bar_delta, threshold, current_close, candle1['high']):
+                    continue
+                
+                gap_size = (candle3['low'] - candle1['high']) / candle1['high'] * 100
+                
+                if gap_size < min_gap_size:
+                    continue
+                
+                zone = {
+                    'type': 'bullish',
+                    'min': candle1['high'],
+                    'max': candle3['low'],
+                    'size': gap_size,
+                    'strength': min(100, gap_size * 20),
+                    'confirmed': mode == 'advanced',
+                    'tf': tf_name,
+                    'description': f"📈 FVG ({tf_name}) бычий: {candle1['high']:.4f}-{candle3['low']:.4f} ({gap_size:.2f}%)"
+                }
+                result['zones'].append(zone)
+                result['has_fvg'] = True
+            
+            # Медвежий FVG
+            elif candle3['high'] < candle1['low']:
+                if not self._should_include_fvg(mode, bar_delta, threshold, current_close, candle1['low'], is_bullish=False):
+                    continue
+                
+                gap_size = (candle1['low'] - candle3['high']) / candle3['high'] * 100
+                
+                if gap_size < min_gap_size:
+                    continue
+                
+                zone = {
+                    'type': 'bearish',
+                    'min': candle3['high'],
+                    'max': candle1['low'],
+                    'size': gap_size,
+                    'strength': min(100, gap_size * 20),
+                    'confirmed': mode == 'advanced',
+                    'tf': tf_name,
+                    'description': f"📉 FVG ({tf_name}) медвежий: {candle3['high']:.4f}-{candle1['low']:.4f} ({gap_size:.2f}%)"
+                }
+                result['zones'].append(zone)
+                result['has_fvg'] = True
+        
+        # Сортируем по расстоянию до текущей цены
+        current_price = df['close'].iloc[-1]
+        max_distance = self.settings.get('max_distance_pct', 15.0)
+        
+        filtered_zones = []
+        for zone in result['zones']:
+            if current_price < zone['min']:
+                distance = (zone['min'] - current_price) / current_price * 100
+            elif current_price > zone['max']:
+                distance = (current_price - zone['max']) / current_price * 100
+            else:
+                distance = 0
+            
+            zone['distance'] = distance
+            
+            if distance <= max_distance:
+                filtered_zones.append(zone)
+                result['signals'].append(zone['description'])
+        
+        result['zones'] = filtered_zones
+        result['zones'].sort(key=lambda x: x['distance'])
+        
+        if result['zones']:
+            result['strength'] = sum(z['strength'] for z in result['zones']) / len(result['zones'])
+        
+        return result
+    
+    def _should_include_fvg(self, mode: str, bar_delta: float, threshold: float, 
+                            current_close: float, level_price: float, is_bullish: bool = True) -> bool:
+        """
+        Проверка фильтров для FVG
+        """
+        if mode != 'advanced':
+            return True
+        
+        # Фильтр по bar_delta (проценту изменения свечи)
+        if self.settings.get('use_bar_delta_filter', True):
+            if bar_delta < threshold:
+                return False
+        
+        # Фильтр по подтверждению закрытием
+        if self.settings.get('use_close_confirmation', True):
+            if is_bullish:
+                if current_close <= level_price:
+                    return False
+            else:
+                if current_close >= level_price:
+                    return False
+        
+        return True
+    
+    def analyze_multi_timeframe(self, dataframes: Dict[str, pd.DataFrame]) -> Dict:
+        """
+        Анализ FVG на всех таймфреймах
+        """
+        result = {
+            'has_fvg': False,
+            'zones': [],
+            'signals': [],
+            'strength': 0,
+            'zones_by_tf': {}
+        }
+        
+        timeframes = self.settings.get('timeframes', ['15m', '1h', '4h'])
+        
+        tf_map = {
+            '15m': 'current',
+            '1h': 'hourly',
+            '4h': 'four_hourly',
+            '1d': 'daily',
+            '1w': 'weekly'
+        }
+        
+        for tf_display in timeframes:
+            tf_key = tf_map.get(tf_display, tf_display)
+            if tf_key not in dataframes or dataframes[tf_key] is None:
+                continue
+            
+            df = dataframes[tf_key]
+            fvg_result = self.analyze(df, tf_display)
+            
+            if fvg_result['has_fvg']:
+                result['has_fvg'] = True
+                result['zones'].extend(fvg_result['zones'])
+                result['signals'].extend(fvg_result['signals'])
+                result['strength'] = max(result['strength'], fvg_result['strength'])
+                result['zones_by_tf'][tf_display] = fvg_result['zones']
+        
+        # Сортируем все зоны по расстоянию
+        result['zones'].sort(key=lambda x: x.get('distance', 999))
+        
+        return result
+
 # ============== МУЛЬТИТАЙМФРЕЙМ АНАЛИЗАТОР ==============
 
 class MultiTimeframeAnalyzer:
@@ -3997,6 +4359,7 @@ class MultiTimeframeAnalyzer:
         self.stop_hunt_detector = StopHuntDetector()
         self.liquidity_zone_detector = LiquidityZoneDetector()
         self.pattern_analyzer = PatternAnalyzer()
+        self.smc_fvg_analyzer = SMCFvgAnalyzer()
 
     def set_fibonacci(self, fib_analyzer):
         self.fibonacci = fib_analyzer
@@ -4428,6 +4791,7 @@ class MultiTimeframeAnalyzer:
         
         return result
     
+    # ============== Старый метод анализа, не используется сейчас ==============
     def analyze_fvg_multi_timeframe(self, dataframes: Dict[str, pd.DataFrame], current_price: float) -> Dict:
         """
         Анализ FVG на всех таймфреймах с фильтрацией по расстоянию
@@ -5016,6 +5380,61 @@ class MultiTimeframeAnalyzer:
                
         logger.info(f"  📊 {symbol} - Цена: {last['close']}, RSI: {last['rsi'] if pd.notna(last['rsi']) else 'N/A'}")
 
+        # ===== ОПРЕДЕЛЕНИЕ ТАЙМФРЕЙМА ДЛЯ ТЕКУЩЕГО ТИПА СИГНАЛА =====
+        from config import SIGNAL_TIMEFRAMES
+        
+        # Определяем ТФ в зависимости от типа сигнала
+        if signal_type == 'pump':
+            tf_config = SIGNAL_TIMEFRAMES.get('pump', {})
+            main_tf = tf_config.get('timeframe', SIGNAL_TIMEFRAMES['default'])
+            secondary_tf = tf_config.get('secondary')
+        elif signal_type == 'accumulation':
+            tf_config = SIGNAL_TIMEFRAMES.get('accumulation', {})
+            main_tf = tf_config.get('timeframe', SIGNAL_TIMEFRAMES['default'])
+            secondary_tf = tf_config.get('secondary')
+        else:
+            tf_config = SIGNAL_TIMEFRAMES.get('regular', {})
+            main_tf = tf_config.get('timeframe', SIGNAL_TIMEFRAMES['default'])
+            secondary_tf = tf_config.get('secondary')
+        
+        # Получаем DataFrame для основного ТФ
+        if main_tf == 'current':
+            df_main = dataframes.get('current')
+        else:
+            # Конвертируем '15m' -> 'current', '1h' -> 'hourly' и т.д.
+            tf_map = {
+                '1m': '1m', '3m': '3m', '5m': '5m',
+                '15m': 'current', '30m': '30m',
+                '1h': 'hourly', '4h': 'four_hourly',
+                '1d': 'daily', '1w': 'weekly'
+            }
+            df_main = dataframes.get(tf_map.get(main_tf, 'current'))
+        
+        if df_main is None or df_main.empty:
+            logger.warning(f"⚠️ Нет данных для ТФ {main_tf}, использую current")
+            df_main = dataframes.get('current')
+        
+        # Используем df_main вместо df для основного анализа
+        df = df_main
+        last = df.iloc[-1]
+        prev = df.iloc[-2] if len(df) > 1 else last
+        
+        logger.info(f"  📊 {symbol} - Цена: {last['close']}, RSI: {last['rsi'] if pd.notna(last['rsi']) else 'N/A'}")
+        logger.info(f"  📊 Использую ТФ: {main_tf} (тип сигнала: {signal_type})")
+        
+        # Если есть secondary ТФ, загружаем его для подтверждения
+        if secondary_tf:
+            tf_map = {
+                '1m': '1m', '3m': '3m', '5m': '5m',
+                '15m': 'current', '30m': '30m',
+                '1h': 'hourly', '4h': 'four_hourly',
+                '1d': 'daily', '1w': 'weekly'
+            }
+            secondary_key = tf_map.get(secondary_tf, 'current')
+            df_secondary = dataframes.get(secondary_key)
+            if df_secondary is not None and not df_secondary.empty:
+                logger.info(f"  📊 Вторичный ТФ {secondary_tf} загружен")
+
         # Словарь для перевода таймфреймов
         tf_short = {
             'monthly': '1М',
@@ -5387,20 +5806,15 @@ class MultiTimeframeAnalyzer:
             
             from config import BREAKOUT_CONFIRMATION_SETTINGS
             
-            # ✅ Используем младший ТФ для подтверждения пробоя (5m)
-            confirmation_tf = '5m'
-            df_confirmation = None
-            current_tf_name = confirmation_tf
-            
-            # Пытаемся получить данные 5m
-            if confirmation_tf in dataframes and dataframes[confirmation_tf] is not None:
-                df_confirmation = dataframes[confirmation_tf]
-                logger.info(f"  📊 Использую {confirmation_tf} для подтверждения пробоя")
+            # ✅ Используем secondary_tf для подтверждения, если он есть
+            if secondary_tf and df_secondary is not None:
+                df_confirmation = df_secondary
+                current_tf_name = secondary_tf
+                logger.info(f"  📊 Использую {secondary_tf} для подтверждения пробоя")
             else:
-                # Если нет 5m — используем current (15m) как fallback
                 df_confirmation = df
-                current_tf_name = TIMEFRAMES.get('current', '15m')
-                logger.info(f"  ⚠️ Нет данных {confirmation_tf}, использую {current_tf_name} для подтверждения")
+                current_tf_name = main_tf
+                logger.info(f"  ⚠️ Нет данных {secondary_tf}, использую {main_tf}")
             
             # Уровни ищем на текущем ТФ (15m)
             trend_analyzer = TrendLineAnalyzer()
@@ -5623,25 +6037,21 @@ class MultiTimeframeAnalyzer:
                         confidence -= 20
                         logger.info(f"  ⚠️ {symbol} - Слабое накопление на пробитом уровне")
         
-        # ===== FVG МУЛЬТИТАЙМФРЕЙМОВЫЙ АНАЛИЗ =====
+        # ===== FVG МУЛЬТИТАЙМФРЕЙМОВЫЙ АНАЛИЗ (SMC) =====
         fvg_analysis = {'has_fvg': False, 'signals': [], 'zones': []}
-        if FEATURES['advanced']['smart_money']:
+        if FEATURES['advanced']['smart_money'] and FVG_SETTINGS.get('enabled', True):
             try:
-                logger.info(f"  🔍 {symbol} - Анализ FVG на всех таймфреймах")
-                fvg_analysis = self.analyze_fvg_multi_timeframe(dataframes, last['close'])
+                logger.info(f"  🔍 {symbol} - Анализ FVG (SMC)")
+                fvg_analysis = self.smc_fvg_analyzer.analyze_multi_timeframe(dataframes)
                 logger.info(f"  📊 FVG анализ вернул: has_fvg={fvg_analysis.get('has_fvg', False)}, zones={len(fvg_analysis.get('zones', []))}")
                 
                 if fvg_analysis['has_fvg']:
-                    for signal_text in fvg_analysis['signals']:
+                    for signal_text in fvg_analysis['signals'][:5]:
                         reasons.append(signal_text)
                     confidence += fvg_analysis['strength'] / 5
-                    logger.info(f"  ✅ {symbol} - Найдено FVG: {len(fvg_analysis['signals'])} на разных ТФ")
-                    
+                    logger.info(f"  ✅ {symbol} - Найдено FVG: {len(fvg_analysis['zones'])}")
             except Exception as e:
-                logger.error(f"❌ Ошибка в FVG анализе для {symbol}: {e}")
-                import traceback
-                traceback.print_exc()
-                fvg_analysis = {'has_fvg': False, 'signals': [], 'zones': []}
+                logger.error(f"❌ Ошибка в FVG анализе: {e}")
 
         # ===== FVG ПО НАПРАВЛЕНИЮ =====
         if strategy['fvg'].get('direction_filter', True):
@@ -5702,7 +6112,35 @@ class MultiTimeframeAnalyzer:
             ## Для простоты пока пропустим, добавим позже
             #logger.info(f"  📊 Требуется закрытие FVG на {require_close_pct}%")
         
-        # ===== ЗОНЫ ЛИКВИДНОСТИ =====  ← ✅ ВСТАВИТЬ ЭТОТ БЛОК ЗДЕСЬ            
+        # ===== SMC: CHoCH (смена тренда) =====
+        choch_analysis = None
+        if hasattr(self, 'smart_money') and FEATURES['advanced']['smart_money']:
+            try:
+                choch_analysis = self.smart_money.detect_choch(df, tf_short.get('current', '15м'))
+                if choch_analysis.get('has_choch'):
+                    reasons.append(choch_analysis['description'])
+                    confidence += choch_analysis['strength'] / 5
+                    if choch_analysis['direction']:
+                        direction = choch_analysis['direction']
+                        logger.info(f"  🎯 Направление от CHoCH: {direction}")
+            except Exception as e:
+                logger.error(f"Ошибка CHoCH: {e}")
+
+        # ===== SMC: Premium/Discount Zones =====
+        pd_analysis = self.smart_money.calculate_premium_discount_zones(df, tf_short.get('current', '15м'))
+        if pd_analysis.get('has_zone'):
+            reasons.append(pd_analysis['description'])
+            confidence += 15
+            if pd_analysis['direction'] and direction == 'NEUTRAL':
+                direction = pd_analysis['direction']
+
+        # ===== SMC: EQH/EQL =====
+        equal_analysis = self.smart_money.find_equal_highs_lows(df, tf_short.get('current', '15м'))
+        if equal_analysis.get('has_equal'):
+            reasons.append(equal_analysis['description'])
+            confidence += 10
+
+        # ===== ЗОНЫ ЛИКВИДНОСТИ =====              
         if LIQUIDITY_ZONES_SETTINGS.get('enabled', True):
             try:
                 logger.info(f"  🔍 {symbol} - Анализ зон ликвидности")
