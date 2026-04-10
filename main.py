@@ -4356,21 +4356,32 @@ class SMCFvgAnalyzer:
         # Сортируем все зоны по расстоянию
         result['zones'].sort(key=lambda x: x.get('distance', 999))
         
-                # Сортируем все зоны по расстоянию
-        result['zones'].sort(key=lambda x: x.get('distance', 999))
-        
-        # ✅ Оставляем только ближайший FVG сверху и снизу
+        # Получаем текущую цену
         current_price = dataframes['current']['close'].iloc[-1]
+        
+        # 1. Находим FVG, в котором находится цена
+        fvg_current = [z for z in result['zones'] if z['min'] <= current_price <= z['max']]
+        
+        # 2. Находим ближайший FVG сверху и снизу
         fvg_above = [z for z in result['zones'] if z['min'] > current_price]
         fvg_below = [z for z in result['zones'] if z['max'] < current_price]
         
         fvg_above.sort(key=lambda x: x['min'])
         fvg_below.sort(key=lambda x: x['max'], reverse=True)
         
+        # 3. Формируем итоговый список (максимум 2 зоны)
         filtered_zones = []
-        if fvg_above:
+        
+        # Сначала добавляем FVG, в котором цена (если есть)
+        if fvg_current:
+            filtered_zones.append(fvg_current[0])
+        
+        # Затем добавляем ближайший сверху (если есть и ещё нет 2 зон)
+        if fvg_above and len(filtered_zones) < 2:
             filtered_zones.append(fvg_above[0])
-        if fvg_below:
+        
+        # Затем добавляем ближайший снизу (если есть и ещё нет 2 зон)
+        if fvg_below and len(filtered_zones) < 2:
             filtered_zones.append(fvg_below[0])
         
         result['zones'] = filtered_zones
@@ -6053,9 +6064,11 @@ class MultiTimeframeAnalyzer:
                 logger.info(f"  📊 FVG анализ вернул: has_fvg={fvg_analysis.get('has_fvg', False)}, zones={len(fvg_analysis.get('zones', []))}")
                 
                 if fvg_analysis['has_fvg']:
-                    for signal_text in fvg_analysis['signals'][:5]:
+                    for zone in fvg_analysis['zones']:  # берём из zones, а не из signals
+                        reasons.insert(0, zone['description'])
+                    # for signal_text in fvg_analysis['signals'][:5]:
                         # reasons.append(signal_text)  # ← было
-                        reasons.insert(0, signal_text)  # ← стало
+                        # reasons.insert(0, signal_text)  # ← стало
                     confidence += fvg_analysis['strength'] / 5
                     logger.info(f"  ✅ {symbol} - Найдено FVG: {len(fvg_analysis['zones'])}")
             except Exception as e:
