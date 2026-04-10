@@ -6347,37 +6347,37 @@ class MultiTimeframeAnalyzer:
         logger.info(f"  🎯 [1] Направление после базового определения: {direction}")
         
         # ===== ПРИОРИТЕТ СТАРШИХ ТАЙМФРЕЙМОВ =====
-            if senior_tf_analysis.get('has_senior_level', False):
-                # Проверяем наличие бычьих сигналов на 1д/1н
-                bullish_on_senior = False
-                for signal in senior_tf_analysis.get('signals', []):
-                    if any(word in signal for word in ['FVG', 'быч', 'поддержка', 'EMA']):
-                        if '1д' in signal or '1н' in signal:
-                            bullish_on_senior = True
-                            break
-                
-                # Медвежий сигнал на старших ТФ → SHORT
-                bearish_on_senior = False
-                for signal in senior_tf_analysis.get('signals', []):
-                    if any(word in signal for word in ['FVG', 'медвеж', 'сопротивление', 'EMA']):
-                        if '1д' in signal or '1н' in signal:
-                            bearish_on_senior = True
-                            break
-                
-                if bearish_on_senior and direction == 'LONG':
-                    old_direction = direction
-                    direction = 'SHORT'
-                    reasons.append(f"🔄 СМЕНА НАПРАВЛЕНИЯ: {old_direction} → SHORT (медвежий сигнал на 1д/1н)")
-                    confidence += 20
-                    logger.info(f"  🔄 Приоритет старших ТФ: LONG → SHORT")
-                
-                # ✅ БЫЧИЙ СИГНАЛ НА СТАРШИХ ТФ → LONG
-                if bullish_on_senior and direction == 'SHORT':
-                    old_direction = direction
-                    direction = 'LONG'
-                    reasons.append(f"🔄 СМЕНА НАПРАВЛЕНИЯ: {old_direction} → LONG (бычий сигнал на 1д/1н)")
-                    confidence += 20
-                    logger.info(f"  🔄 Приоритет старших ТФ: SHORT → LONG")
+        if senior_tf_analysis.get('has_senior_level', False):
+            # Проверяем наличие бычьих сигналов на 1д/1н
+            bullish_on_senior = False
+            for signal in senior_tf_analysis.get('signals', []):
+                if any(word in signal for word in ['FVG', 'быч', 'поддержка', 'EMA']):
+                    if '1д' in signal or '1н' in signal:
+                        bullish_on_senior = True
+                        break
+            
+            # Медвежий сигнал на старших ТФ → SHORT
+            bearish_on_senior = False
+            for signal in senior_tf_analysis.get('signals', []):
+                if any(word in signal for word in ['FVG', 'медвеж', 'сопротивление', 'EMA']):
+                    if '1д' in signal or '1н' in signal:
+                        bearish_on_senior = True
+                        break
+            
+            if bearish_on_senior and direction == 'LONG':
+                old_direction = direction
+                direction = 'SHORT'
+                reasons.append(f"🔄 СМЕНА НАПРАВЛЕНИЯ: {old_direction} → SHORT (медвежий сигнал на 1д/1н)")
+                confidence += 20
+                logger.info(f"  🔄 Приоритет старших ТФ: LONG → SHORT")
+            
+            # ✅ БЫЧИЙ СИГНАЛ НА СТАРШИХ ТФ → LONG
+            if bullish_on_senior and direction == 'SHORT':
+                old_direction = direction
+                direction = 'LONG'
+                reasons.append(f"🔄 СМЕНА НАПРАВЛЕНИЯ: {old_direction} → LONG (бычий сигнал на 1д/1н)")
+                confidence += 20
+                logger.info(f"  🔄 Приоритет старших ТФ: SHORT → LONG")
 
         # ===== ДЕТЕКТОР ВЫБИВА СТОПОВ =====
         stop_hunt = None
