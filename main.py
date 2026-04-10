@@ -2595,6 +2595,30 @@ class SmartMoneyAnalyzer:
         self.order_blocks = []
         self.fair_value_gaps = []
         
+    def _is_swing_high(self, df: pd.DataFrame, idx: int, window: int = 5) -> bool:
+        """Проверка, является ли свеча локальным максимумом"""
+        if idx < window or idx >= len(df) - window:
+            return False
+        high = df['high'].iloc[idx]
+        for i in range(1, window + 1):
+            if high <= df['high'].iloc[idx - i]:
+                return False
+            if high <= df['high'].iloc[idx + i]:
+                return False
+        return True
+
+    def _is_swing_low(self, df: pd.DataFrame, idx: int, window: int = 5) -> bool:
+        """Проверка, является ли свеча локальным минимумом"""
+        if idx < window or idx >= len(df) - window:
+            return False
+        low = df['low'].iloc[idx]
+        for i in range(1, window + 1):
+            if low >= df['low'].iloc[idx - i]:
+                return False
+            if low >= df['low'].iloc[idx + i]:
+                return False
+        return True
+    
     def find_order_blocks_improved(self, df: pd.DataFrame, tf_name: str) -> List[Dict]:
         """
         Улучшенный поиск ордер-блоков с фильтром по ATR
@@ -4937,23 +4961,7 @@ class MultiTimeframeAnalyzer:
                     import traceback
                     traceback.print_exc()
                     continue
-        
-        # ===== ВСТАВЬТЕ ЭТОТ БЛОК ЗДЕСЬ =====
-        # После сбора всех зон, перед фильтрацией
-        logger.info(f"  📊 Всего найдено FVG: {len(all_zones)}")
-        for zone in all_zones:
-            # Добавляем расстояние для сортировки если еще нет
-            if 'sort_distance' not in zone:
-                if zone['in_zone']:
-                    zone['sort_distance'] = 0
-                elif zone['min'] > current_price:
-                    zone['sort_distance'] = (zone['min'] - current_price) / current_price
-                else:
-                    zone['sort_distance'] = (current_price - zone['max']) / current_price
-            
-            logger.info(f"    FVG {zone['tf']}: {zone['min']:.6f}-{zone['max']:.6f}, расстояние {zone['sort_distance']*100:.1f}%")
-        # ===== КОНЕЦ БЛОКА =====
-        
+                        
         # ===== ФИЛЬТРАЦИЯ ПО РАССТОЯНИЮ ДЛЯ ПРИЧИН =====
         MAX_DISTANCE_PCT = 15.0
         DISTANCE_THRESHOLDS = {
@@ -4982,29 +4990,7 @@ class MultiTimeframeAnalyzer:
             result['strength'] += zone['strength'] * zone['weight']
 
         logger.info(f"  📊 Добавлено {len(result['signals'])} FVG в причины (из {len(all_zones)} найденных)")
-
-        # ===== ФИЛЬТРАЦИЯ ДЛЯ ГРАФИКА: ТОЛЬКО БЛИЖАЙШИЕ =====
-        if filtered_zones:
-            # Добавляем расстояние для сортировки
-            zones_with_distance = []
-            for zone in filtered_zones:
-                if zone['in_zone']:
-                    zone['sort_distance'] = 0
-                elif zone['min'] > current_price:
-                    zone['sort_distance'] = (zone['min'] - current_price) / current_price
-                else:
-                    zone['sort_distance'] = (current_price - zone['max']) / current_price
-                
-                zones_with_distance.append(zone)
-            
-            # Сортируем по расстоянию
-            zones_with_distance.sort(key=lambda z: z['sort_distance'])
-            
-            # Берем ТОЛЬКО 2 ближайшие зоны для графика
-            result['zones'] = zones_with_distance[:2]
-            
-            logger.info(f"  🎨 Для графика отобрано {len(result['zones'])} ближайших FVG из {len(filtered_zones)}")
-        
+                       
         # Ограничиваем силу 100%
         if result['strength'] > 100:
             result['strength'] = 100
@@ -6360,35 +6346,7 @@ class MultiTimeframeAnalyzer:
         direction = base_direction
         logger.info(f"  🎯 [1] Направление после базового определения: {direction}")
         
-        # ===== АНАЛИЗ FVG ДЛЯ КОРРЕКЦИИ УВЕРЕННОСТИ =====
-        if fvg_analysis['has_fvg'] and 'zones' in fvg_analysis:
-            current_price = last['close']
-            fvg_above = 0
-            fvg_below = 0
-            fvg_in_zone = 0
-            
-            for zone in fvg_analysis['zones']:
-                if zone['in_zone']:
-                    fvg_in_zone += 1
-                    reasons.append(f"🎯 Цена в FVG {zone['tf_short']}: {zone['min']:.4f}-{zone['max']:.4f}")
-                    confidence += 20
-                    
-                    if trendline_breakout:
-                        confidence += 15
-                        reasons.append(f"✅ Пробой из FVG зоны {zone['tf_short']}")
-                    
-                elif zone['min'] > current_price:
-                    fvg_above += 1
-                    if direction == 'LONG':
-                        target_str = f"{zone['min']:.6f}" if zone['min'] < 0.001 else f"{zone['min']:.4f}"
-                        reasons.append(f"🎯 Цель: FVG {zone['tf_short']} {target_str} (+{zone['distance_pct']:.1f}%)")
-                else:
-                    fvg_below += 1
-                    if direction == 'SHORT':
-                        target_str = f"{zone['max']:.6f}" if zone['max'] < 0.001 else f"{zone['max']:.4f}"
-                        reasons.append(f"🎯 Цель: FVG {zone['tf_short']} {target_str} (-{zone['distance_pct']:.1f}%)")
-
-            # ===== ПРИОРИТЕТ СТАРШИХ ТАЙМФРЕЙМОВ =====
+        # ===== ПРИОРИТЕТ СТАРШИХ ТАЙМФРЕЙМОВ =====
             if senior_tf_analysis.get('has_senior_level', False):
                 # Проверяем наличие бычьих сигналов на 1д/1н
                 bullish_on_senior = False
@@ -6421,116 +6379,68 @@ class MultiTimeframeAnalyzer:
                     confidence += 20
                     logger.info(f"  🔄 Приоритет старших ТФ: SHORT → LONG")
 
-            # ===== ДЕТЕКТОР ВЫБИВА СТОПОВ =====
-            stop_hunt = None
-            if FEATURES['advanced']['patterns'] and STOP_HUNT_SETTINGS.get('enabled', True):
-                try:
-                    logger.info(f"  🔍 {symbol} - Анализ выбива стопов")
+        # ===== ДЕТЕКТОР ВЫБИВА СТОПОВ =====
+        stop_hunt = None
+        if FEATURES['advanced']['patterns'] and STOP_HUNT_SETTINGS.get('enabled', True):
+            try:
+                logger.info(f"  🔍 {symbol} - Анализ выбива стопов")
+                
+                # Проверяем на разных ТФ
+                tf_priority = ['current', '30m', 'hourly', 'four_hourly']
+                for tf_name in tf_priority:
+                    if tf_name not in dataframes or dataframes[tf_name] is None:
+                        continue
                     
-                    # Проверяем на разных ТФ
-                    tf_priority = ['current', '30m', 'hourly', 'four_hourly']
-                    for tf_name in tf_priority:
-                        if tf_name not in dataframes or dataframes[tf_name] is None:
-                            continue
-                        
-                        df_tf = dataframes[tf_name]
-                        stop_hunt = self.stop_hunt_detector.detect_stop_hunt(
-                            symbol, tf_name, df_tf, last['close']
-                        )
-                        
-                        if stop_hunt:
-                            logger.info(f"  ✅ {symbol} - Обнаружен стоп-хант на {tf_name}!")
-                            reasons.append(stop_hunt['message'])
-                            confidence += STOP_HUNT_SETTINGS['strength_bonus']
-                            break
-                            
-                except Exception as e:
-                    logger.error(f"❌ Ошибка в детекторе стоп-хантов для {symbol}: {e}")
-
-            # ===== ВХОД ПОСЛЕ ВЫБИВА СТОПОВ =====
-            stop_hunt_signal = False  # ← флаг, что сигнал уже сформирован
-            if stop_hunt and POST_STOP_HUNT_SETTINGS.get('enabled', True):
-                # Стоп-хант уже обнаружен, формируем сигнал на разворот
-                logger.info(f"  🎯 {symbol} - Формирую сигнал на вход после стоп-ханта")
-                
-                # Направление разворота уже определено в stop_hunt['direction']
-                direction = stop_hunt['direction']
-                signal_type = POST_STOP_HUNT_SETTINGS.get('signal_type', 'stop_hunt_reversal')
-                
-                # Добавляем специальную причину
-                reasons.append(f"🚀 ВХОД ПОСЛЕ ВЫБИВА СТОПОВ: {stop_hunt['message']}")
-                
-                # Увеличиваем уверенность
-                confidence += POST_STOP_HUNT_SETTINGS.get('min_confidence_bonus', 15)
-                
-                # Проверяем подтверждение от младших ТФ (1м, 3м, 5м)
-                if POST_STOP_HUNT_SETTINGS.get('require_confirmation', True):
-                    minor_confirmation = 0
-                    for tf_name in ['1m', '3m', '5m']:
-                        if tf_name in dataframes and dataframes[tf_name] is not None:
-                            df_minor = dataframes[tf_name]
-                            last_minor = df_minor.iloc[-1]
-                            
-                            if direction == 'LONG' and last_minor['ema_9'] > last_minor['ema_21']:
-                                minor_confirmation += 1
-                            elif direction == 'SHORT' and last_minor['ema_9'] < last_minor['ema_21']:
-                                minor_confirmation += 1
+                    df_tf = dataframes[tf_name]
+                    stop_hunt = self.stop_hunt_detector.detect_stop_hunt(
+                        symbol, tf_name, df_tf, last['close']
+                    )
                     
-                    if minor_confirmation >= 2:
-                        reasons.append(f"✅ Подтверждение от младших ТФ ({minor_confirmation}/3)")
-                        confidence += 10
-                    else:
-                        reasons.append(f"⚠️ Слабое подтверждение от младших ТФ ({minor_confirmation}/3)")
-                        confidence -= 5            
-            
-            # ===== НОВАЯ ЛОГИКА СМЕНЫ НАПРАВЛЕНИЯ =====
-            # Если уже есть стоп-хант сигнал — не меняем направление
-            if not stop_hunt_signal:
-                
-                # Если мы в LONG, но сверху 3+ зон FVG - сильное сопротивление
-                if direction == 'LONG' and fvg_above >= 3:
-                    old_direction = direction
-                    direction = 'SHORT 📉 (сильное сопротивление FVG)'
-                    logger.info(f"  🎯 [2] Смена направления в FVG: {old_direction} → {direction}")
-                    reasons.append(f"🔻 Смена направления: {old_direction} → SHORT (FVG сверху)")
-                    confidence += 25
-                    logger.info(f"  🔄 Смена направления из-за {fvg_above} FVG сверху")
-                
-                # Если мы в SHORT, но снизу 3+ зон FVG - сильная поддержка
-                elif direction == 'SHORT' and fvg_below >= 3:
-                    old_direction = direction
-                    direction = 'LONG 📈 (сильная поддержка FVG)'
-                    logger.info(f"  🎯 [2] Смена направления в FVG: {old_direction} → {direction}")
-                    reasons.append(f"🔺 Смена направления: {old_direction} → LONG (FVG снизу)")
-                    confidence += 25
-                    logger.info(f"  🔄 Смена направления из-за {fvg_below} FVG снизу")
-                
-                # Если цена в зоне FVG - это сильный уровень
-                if fvg_in_zone > 0:
-                    if direction == 'LONG':
-                        reasons.append(f"✅ Подтверждение LONG - цена в зоне FVG")
-                        confidence += 15
-                    else:
-                        reasons.append(f"✅ Подтверждение SHORT - цена в зоне FVG")
-                        confidence += 15
-            else:
-                logger.info(f"  🎯 {symbol} - Направление задано стоп-хантом, пропускаем FVG смену")
-            
-            # ===== КОНЕЦ НОВОГО БЛОКА =====                                                    
+                    if stop_hunt:
+                        logger.info(f"  ✅ {symbol} - Обнаружен стоп-хант на {tf_name}!")
+                        reasons.append(stop_hunt['message'])
+                        confidence += STOP_HUNT_SETTINGS['strength_bonus']
+                        break
+                        
+            except Exception as e:
+                logger.error(f"❌ Ошибка в детекторе стоп-хантов для {symbol}: {e}")
 
-            # Склонение для "зона/зоны/зон"
-            if direction == 'LONG' and fvg_above > 0:
-                zone_word = "зона" if fvg_above == 1 else "зоны" if fvg_above <= 4 else "зон"
-                reasons.append(f"⚠️ {fvg_above} {zone_word} FVG сверху (сопротивление)")
-                confidence -= fvg_above * 3
+        # ===== ВХОД ПОСЛЕ ВЫБИВА СТОПОВ =====
+        stop_hunt_signal = False  # ← флаг, что сигнал уже сформирован
+        if stop_hunt and POST_STOP_HUNT_SETTINGS.get('enabled', True):
+            # Стоп-хант уже обнаружен, формируем сигнал на разворот
+            logger.info(f"  🎯 {symbol} - Формирую сигнал на вход после стоп-ханта")
             
-            if direction == 'SHORT' and fvg_below > 0:
-                zone_word = "зона" if fvg_below == 1 else "зоны" if fvg_below <= 4 else "зон"
-                reasons.append(f"⚠️ {fvg_below} {zone_word} FVG снизу (поддержка)")
-                confidence -= fvg_below * 3
-        
-        logger.info(f"  🎯 [4] Направление после FVG анализа: {direction}")      
-        
+            # Направление разворота уже определено в stop_hunt['direction']
+            direction = stop_hunt['direction']
+            signal_type = POST_STOP_HUNT_SETTINGS.get('signal_type', 'stop_hunt_reversal')
+            
+            # Добавляем специальную причину
+            reasons.append(f"🚀 ВХОД ПОСЛЕ ВЫБИВА СТОПОВ: {stop_hunt['message']}")
+            
+            # Увеличиваем уверенность
+            confidence += POST_STOP_HUNT_SETTINGS.get('min_confidence_bonus', 15)
+            
+            # Проверяем подтверждение от младших ТФ (1м, 3м, 5м)
+            if POST_STOP_HUNT_SETTINGS.get('require_confirmation', True):
+                minor_confirmation = 0
+                for tf_name in ['1m', '3m', '5m']:
+                    if tf_name in dataframes and dataframes[tf_name] is not None:
+                        df_minor = dataframes[tf_name]
+                        last_minor = df_minor.iloc[-1]
+                        
+                        if direction == 'LONG' and last_minor['ema_9'] > last_minor['ema_21']:
+                            minor_confirmation += 1
+                        elif direction == 'SHORT' and last_minor['ema_9'] < last_minor['ema_21']:
+                            minor_confirmation += 1
+                
+                if minor_confirmation >= 2:
+                    reasons.append(f"✅ Подтверждение от младших ТФ ({minor_confirmation}/3)")
+                    confidence += 10
+                else:
+                    reasons.append(f"⚠️ Слабое подтверждение от младших ТФ ({minor_confirmation}/3)")
+                    confidence -= 5                   
+                   
         # ПОТОМ ВЫВОДИМ ЛОГ (уже с нормализованной уверенностью)
         logger.info(f"  📊 {symbol} - Направление: {direction}, Уверенность: {confidence}")
         
