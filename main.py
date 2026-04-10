@@ -5460,20 +5460,19 @@ class MultiTimeframeAnalyzer:
 
         fvg_analysis = None
         liquidity_zones = None
-    
-        # ===== АНАЛИЗ СОГЛАСОВАННОСТИ ТРЕНДОВ =====
-        alignment = self.analyze_timeframe_alignment(dataframes)
-        logger.info(f"  📊 {symbol} - Согласованность трендов: {alignment['trend_alignment']}%")
-
-        # ✅ ВСТАВИТЬ СЮДА
-        if alignment['trend_alignment'] < 30:
-            reasons.append(f"⚠️ Низкая согласованность ТФ ({alignment['trend_alignment']:.0f}%) — возможен разворот")
 
         # ===== ОБЪЯВЛЯЕМ ПЕРЕМЕННЫЕ =====
         confidence = 50
         reasons = []
         direction = 'NEUTRAL'
         signal_type = 'regular'
+        
+        # ===== АНАЛИЗ СОГЛАСОВАННОСТИ ТРЕНДОВ =====
+        alignment = self.analyze_timeframe_alignment(dataframes)
+        logger.info(f"  📊 {symbol} - Согласованность трендов: {alignment['trend_alignment']}%")
+       
+        if alignment['trend_alignment'] < 30:
+            reasons.append(f"⚠️ Низкая согласованность ТФ ({alignment['trend_alignment']:.0f}%) — возможен разворот")
         
         # ===== ПРОВЕРКА СОГЛАСОВАННОСТИ ТАЙМФРЕЙМОВ =====
         # Определяем тип сигнала для выбора режима
