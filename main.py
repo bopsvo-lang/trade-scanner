@@ -4362,6 +4362,7 @@ class MultiTimeframeAnalyzer:
         self.liquidity_zone_detector = LiquidityZoneDetector()
         self.pattern_analyzer = PatternAnalyzer()
         self.smc_fvg_analyzer = SMCFvgAnalyzer()
+        self.smart_money = SmartMoneyAnalyzer()
 
     def set_fibonacci(self, fib_analyzer):
         self.fibonacci = fib_analyzer
@@ -6099,7 +6100,9 @@ class MultiTimeframeAnalyzer:
                                 close_pct = ((current_price - zone['min']) / fvg_range) * 100
                             
                             if close_pct < require_close_pct:
-                                reasons.append(f"⚠️ FVG {zone['tf_short']} закрыт только на {close_pct:.0f}% (требуется {require_close_pct}%)")
+                                # ✅ ИСПРАВЛЕНО: используем zone.get('tf', 'FVG') вместо zone['tf_short']
+                                tf_name = zone.get('tf', 'FVG')
+                                reasons.append(f"⚠️ FVG {tf_name} закрыт только на {close_pct:.0f}% (требуется {require_close_pct}%)")
                                 confidence -= 15
                                 logger.info(f"  ⚠️ FVG закрыт на {close_pct:.0f}% < {require_close_pct}%")
                     
