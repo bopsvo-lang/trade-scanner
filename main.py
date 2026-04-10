@@ -6035,7 +6035,8 @@ class MultiTimeframeAnalyzer:
                 
                 if fvg_analysis['has_fvg']:
                     for signal_text in fvg_analysis['signals'][:5]:
-                        reasons.append(signal_text)
+                        # reasons.append(signal_text)  # ← было
+                        reasons.insert(0, signal_text)  # ← стало
                     confidence += fvg_analysis['strength'] / 5
                     logger.info(f"  ✅ {symbol} - Найдено FVG: {len(fvg_analysis['zones'])}")
             except Exception as e:
@@ -6119,7 +6120,8 @@ class MultiTimeframeAnalyzer:
         # ===== SMC: Premium/Discount Zones =====
         pd_analysis = self.smart_money.calculate_premium_discount_zones(df, tf_short.get('current', '15м'))
         if pd_analysis.get('has_zone'):
-            reasons.append(pd_analysis['description'])
+            # reasons.append(pd_analysis['description'])  # ← было
+            reasons.insert(0, pd_analysis['description'])  # ← стало
             confidence += 15
             if pd_analysis['direction'] and direction == 'NEUTRAL':
                 direction = pd_analysis['direction']
@@ -6127,7 +6129,8 @@ class MultiTimeframeAnalyzer:
         # ===== SMC: EQH/EQL =====
         equal_analysis = self.smart_money.find_equal_highs_lows(df, tf_short.get('current', '15м'))
         if equal_analysis.get('has_equal'):
-            reasons.append(equal_analysis['description'])
+            # reasons.append(equal_analysis['description'])  # ← было
+            reasons.insert(0, equal_analysis['description'])  # ← стало
             confidence += 10
 
         # ===== ЗОНЫ ЛИКВИДНОСТИ =====              
