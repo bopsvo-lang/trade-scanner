@@ -5380,6 +5380,12 @@ class MultiTimeframeAnalyzer:
                
         logger.info(f"  📊 {symbol} - Цена: {last['close']}, RSI: {last['rsi'] if pd.notna(last['rsi']) else 'N/A'}")
 
+        # ===== ОБЪЯВЛЯЕМ ПЕРЕМЕННЫЕ =====
+        confidence = 50
+        reasons = []
+        direction = 'NEUTRAL'
+        signal_type = 'regular'
+
         # ===== ОПРЕДЕЛЕНИЕ ТАЙМФРЕЙМА ДЛЯ ТЕКУЩЕГО ТИПА СИГНАЛА =====
         from config import SIGNAL_TIMEFRAMES
         
@@ -5451,7 +5457,7 @@ class MultiTimeframeAnalyzer:
 
         # Переменные для отслеживания пробоя
         breakout_confirmed = False
-
+        
         # Загружаем стратегию
         from config import STRATEGY_SETTINGS
         strategy_name = STRATEGY_SETTINGS['selected']
@@ -5459,14 +5465,8 @@ class MultiTimeframeAnalyzer:
         logger.info(f"  📋 Стратегия: {strategy['name']}")
 
         fvg_analysis = None
-        liquidity_zones = None
-    
-        # ===== ОБЪЯВЛЯЕМ ПЕРЕМЕННЫЕ =====
-        confidence = 50
-        reasons = []
-        direction = 'NEUTRAL'
-        signal_type = 'regular'
-
+        liquidity_zones = None  
+        
         # ===== АНАЛИЗ СОГЛАСОВАННОСТИ ТРЕНДОВ =====
         alignment = self.analyze_timeframe_alignment(dataframes)
         logger.info(f"  📊 {symbol} - Согласованность трендов: {alignment['trend_alignment']}%")
