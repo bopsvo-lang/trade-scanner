@@ -4237,7 +4237,7 @@ class SMCFvgAnalyzer:
                     'strength': min(100, gap_size * 20),
                     'confirmed': mode == 'advanced',
                     'tf': tf_name,
-                    'description': f"📈 FVG ({tf_name}) бычий: {candle1['high']:.4f}-{candle3['low']:.4f} ({gap_size:.2f}%)"
+                    'description': f"📈 FVG ({tf_name}) бычий: {candle1['high']:.9f}-{candle3['low']:.9f} ({gap_size:.2f}%)"
                 }
                 result['zones'].append(zone)
                 result['has_fvg'] = True
@@ -4260,7 +4260,7 @@ class SMCFvgAnalyzer:
                     'strength': min(100, gap_size * 20),
                     'confirmed': mode == 'advanced',
                     'tf': tf_name,
-                    'description': f"📉 FVG ({tf_name}) медвежий: {candle3['high']:.4f}-{candle1['low']:.4f} ({gap_size:.2f}%)"
+                    'description': f"📉 FVG ({tf_name}) медвежий: {candle3['high']:.9f}-{candle1['low']:.9f} ({gap_size:.2f}%)"
                 }
                 result['zones'].append(zone)
                 result['has_fvg'] = True
@@ -4356,6 +4356,25 @@ class SMCFvgAnalyzer:
         # Сортируем все зоны по расстоянию
         result['zones'].sort(key=lambda x: x.get('distance', 999))
         
+                # Сортируем все зоны по расстоянию
+        result['zones'].sort(key=lambda x: x.get('distance', 999))
+        
+        # ✅ Оставляем только ближайший FVG сверху и снизу
+        current_price = dataframes['current']['close'].iloc[-1]
+        fvg_above = [z for z in result['zones'] if z['min'] > current_price]
+        fvg_below = [z for z in result['zones'] if z['max'] < current_price]
+        
+        fvg_above.sort(key=lambda x: x['min'])
+        fvg_below.sort(key=lambda x: x['max'], reverse=True)
+        
+        filtered_zones = []
+        if fvg_above:
+            filtered_zones.append(fvg_above[0])
+        if fvg_below:
+            filtered_zones.append(fvg_below[0])
+        
+        result['zones'] = filtered_zones
+
         return result
 
 # ============== МУЛЬТИТАЙМФРЕЙМ АНАЛИЗАТОР ==============
@@ -7830,10 +7849,21 @@ class FastPumpScanner:
             clean_reason = clean_reason.replace("📐 ", "")
             clean_reason = clean_reason.replace("⚠️ ", "")
             clean_reason = clean_reason.strip()
-            clean_reasons.append(clean_reason)
+            clean_reasons.append(clean_reason)        
+               
+        # ✅ Фильтрация причин (только важные)
+        priority_keywords = ['RSI', 'FVG', 'Пробой', 'Отскок', 'EQH', 'EQL', 'Premium', 'Discount', 'Order Block', 'CHoCH', 'BOS', 'Двойная', 'ФЛАГ', 'КЛИН', 'Голова',]
+        filtered_reasons = []
+        for r in clean_reasons:
+            if any(k in r for k in priority_keywords):
+                filtered_reasons.append(r)
         
-        reasons_lines = [f"   {r}" for r in clean_reasons]
+        # Если после фильтрации ничего не осталось — показываем первые 5
+        if not filtered_reasons:
+            filtered_reasons = clean_reasons[:5]
         
+        reasons_lines = [f"     {r}" for r in filtered_reasons[:8]]
+
         # Собираем сообщение
         lines = [line1, line2, line3, line4, line5, line6, line7]
         if line8:
