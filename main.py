@@ -7865,7 +7865,20 @@ class FastPumpScanner:
             clean_reasons.append(clean_reason)        
                
         # ✅ Фильтрация причин (только важные)
-        priority_keywords = ['RSI', 'FVG', 'Пробой', 'Отскок', 'EQH', 'EQL', 'Premium', 'Discount', 'Order Block', 'CHoCH', 'BOS', 'Двойная', 'ФЛАГ', 'КЛИН', 'Голова',]
+        priority_keywords = [
+            # SMC
+            'EQH', 'EQL', 'Premium', 'Discount', 'FVG', 'Order Block', 'CHoCH', 'BOS',
+            # Памп-дамп
+            'PUMP', 'DUMP', 'пампа', 'дампа', 'Коррекция',
+            # Технический анализ
+            'RSI', 'MACD', 'EMA', 'VWAP', 'Согласованность', 'тренд',
+            # Паттерны и уровни
+            'Пробой', 'Отскок', 'Двойная', 'ФЛАГ', 'КЛИН', 'Голова',
+            # Накопление
+            'Накопление', 'аккумуляция', 'объем', 'сжатие',
+            # Старшие ТФ
+            'Старших ТФ', 'Конфлюенция', 'КОНФЛЮЕНЦИЯ'
+        ]
         filtered_reasons = []
         for r in clean_reasons:
             if any(k in r for k in priority_keywords):
