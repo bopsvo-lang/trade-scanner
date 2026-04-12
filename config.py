@@ -1365,3 +1365,13 @@ FVG_SETTINGS = {
     'use_multi_timeframe': True,      # анализировать FVG на разных ТФ
     'timeframes': ['15m', '1h', '4h', '1d', '1w'], # какие ТФ анализировать
 }
+
+# ============== НАСТРОЙКИ EQH/EQL (РАВНЫЕ МАКСИМУМЫ/МИНИМУМЫ) ==============
+EQUAL_HIGH_LOW_SETTINGS = {
+    'enabled': True,
+    'max_distance_pct': 5.0,           # для памп-дамп (5%)
+    'max_distance_regular_pct': 15.0,  # для обычных сигналов (15%)
+    'max_distance_accumulation_pct': 25.0,  # для накопления (25%)
+    'threshold_pct': 0.1,              # допуск для равных уровней (0.1%)
+    'confirmation_bars': 3,            # бары для подтверждения
+}
