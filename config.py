@@ -1035,14 +1035,14 @@ DYNAMIC_TARGET_SETTINGS = {
     'perfect_setup': {
         'target_1_mult': 4.0,                # Цель 1: 4x ATR
         'target_2_mult': 8.0,                # Цель 2: 8x ATR
-        'stop_mult': 2.5,                    # Стоп: 2.5x ATR
+        'stop_mult': 1.3,                    # Стоп: 2.5x ATR
     },
     
     # Базовые настройки (обычный сигнал)
     'default': {
-        'target_1_mult': 2.5,                # Цель 1: 2.5x ATR
-        'target_2_mult': 5.0,                # Цель 2: 5x ATR
-        'stop_mult': 1.8,                    # Стоп: 1.8x ATR
+        'target_1_mult': 3.0,                # Цель 1: 2.5x ATR
+        'target_2_mult': 6.0,                # Цель 2: 5x ATR
+        'stop_mult': 1.0,                    # Стоп: 1.8x ATR
     },
     
     # Для сильного тренда (недельный тренд + EMA 200)
@@ -1050,7 +1050,7 @@ DYNAMIC_TARGET_SETTINGS = {
         'enabled': True,                     # Вкл/выкл расширенный стоп для сильного тренда
         'target_1_mult': 4.0,                # Цель 1: 4x ATR
         'target_2_mult': 8.0,                # Цель 2: 8x ATR
-        'stop_mult': 3.5,                    # Стоп: 3.5x ATR (шире)
+        'stop_mult': 1.3,                    # Стоп: 3.5x ATR (шире)
     },
     
     # Использовать ATR старшего ТФ
@@ -1363,5 +1363,5 @@ FVG_SETTINGS = {
     
     # Мультитаймфрейм
     'use_multi_timeframe': True,      # анализировать FVG на разных ТФ
-    'timeframes': ['15m', '1h', '4h'], # какие ТФ анализировать
+    'timeframes': ['15m', '1h', '4h', '1d', '1w'], # какие ТФ анализировать
 }
