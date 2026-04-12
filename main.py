@@ -5831,6 +5831,72 @@ class MultiTimeframeAnalyzer:
                 level_type = "поддержки" if "поддержке" in warning['message'] else "сопротивления"
                 reasons.append(f"⏳ {strategy['name']} стратегия: ждем ПРОБОЯ наклонного уровня {level_type} на {current_tf}")
         
+        # ===== АНАЛИЗ МЛАДШИХ ТАЙМФРЕЙМОВ ДЛЯ ПАМП-ДАМП поджатие и пробой, уровни наклонные и горизонтальные(1м, 3м) =====
+        if signal_type in ['PUMP', 'DUMP', 'pump']:
+            try:
+                # 1. Поджатие на 1м и 3м
+                for tf_name in ['1m', '3m']:
+                    if tf_name in dataframes and dataframes[tf_name] is not None:
+                        df_minor = dataframes[tf_name]
+                        if hasattr(self, 'accumulation') and self.accumulation:
+                            compression = self.accumulation.detect_compression(df_minor)
+                            if compression.get('compression'):
+                                reasons.append(f"⚡ Поджатие на {tf_name}: {compression['description']}")
+                                confidence += 15
+                                logger.info(f"  ✅ {symbol} - Поджатие на {tf_name}")
+                
+                # 2. Пробой уровней на 1м и 3м
+                trend_analyzer = TrendLineAnalyzer()
+                for tf_name in ['1m', '3m']:
+                    if tf_name in dataframes and dataframes[tf_name] is not None:
+                        df_minor = dataframes[tf_name]
+                        trend_lines = trend_analyzer.find_trend_lines(df_minor, touch_count=2)
+                        for line in trend_lines:
+                            if line.get('is_broken', False):
+                                level_type = "сопротивления" if line['type'] == 'resistance' else "поддержки"
+                                reasons.append(f"⚡ Пробой наклонного {level_type} на {tf_name} ({line['touches']} касаний)")
+                                confidence += 20
+                                logger.info(f"  ✅ {symbol} - Пробой на {tf_name}")
+                                break  # берём первый пробой
+                
+                # 3. Подход к уровню на 1м и 3м (опционально)
+                for tf_name in ['1m', '3m']:
+                    if tf_name in dataframes and dataframes[tf_name] is not None:
+                        df_minor = dataframes[tf_name]
+                        # Проверяем приближение к локальным экстремумам
+                        recent_high = df_minor['high'].tail(10).max()
+                        recent_low = df_minor['low'].tail(10).min()
+                        current_price = last['close']
+                        
+                        distance_to_high = (recent_high - current_price) / current_price * 100
+                        distance_to_low = (current_price - recent_low) / current_price * 100
+                        
+                        if 0 < distance_to_high <= 0.5:
+                            reasons.append(f"🎯 Цена подходит к локальному максимуму на {tf_name} (+{distance_to_high:.1f}%)")
+                            confidence += 10
+                        elif 0 < distance_to_low <= 0.5:
+                            reasons.append(f"🎯 Цена подходит к локальному минимуму на {tf_name} (-{distance_to_low:.1f}%)")
+                            confidence += 10
+
+                # 4. Пробой горизонтальных уровней на 1м и 3м
+                for tf_name in ['1m', '3m']:
+                    if tf_name in dataframes and dataframes[tf_name] is not None:
+                        df_minor = dataframes[tf_name]
+                        # Ищем локальные максимумы/минимумы
+                        recent_high = df_minor['high'].tail(20).max()
+                        recent_low = df_minor['low'].tail(20).min()
+                        current_price = last['close']
+                        
+                        if current_price > recent_high:
+                            reasons.append(f"⚡ Пробой горизонтального сопротивления на {tf_name}: {recent_high:.4f}")
+                            confidence += 15
+                        elif current_price < recent_low:
+                            reasons.append(f"⚡ Пробой горизонтальной поддержки на {tf_name}: {recent_low:.4f}")
+                            confidence += 15
+                        
+            except Exception as e:
+                logger.error(f"❌ Ошибка анализа младших ТФ для {symbol}: {e}")
+
         # ===== ПОДТВЕРЖДЕНИЕ ПРОБОЕВ =====
         if FEATURES['advanced']['patterns'] and BREAKOUT_CONFIRMATION_SETTINGS['enabled']:
             logger.info(f"  🔍 {symbol} - Проверка подтвержденных пробоев")
