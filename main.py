@@ -6264,7 +6264,7 @@ class MultiTimeframeAnalyzer:
                 direction = pd_analysis['direction']
 
         # ===== SMC: EQH/EQL =====
-        equal_analysis = self.smart_money.find_equal_highs_lows(df, tf_short.get('current', '15м'))
+        equal_analysis = self.smart_money.find_equal_highs_lows(df, tf_short.get('current', '15м'), last['close'], signal_type)
         if equal_analysis.get('has_equal'):
             # reasons.append(equal_analysis['description'])  # ← было
             reasons.insert(0, equal_analysis['description'])  # ← стало
