@@ -4177,8 +4177,21 @@ class MultiExchangeFetcher:
 class SMCFvgAnalyzer:
     """
     Анализатор Fair Value Gaps как в индикаторе Smart Money Concepts
-    """
-    
+    """    
+    def format_price(self, price):
+        if price < 0.0001:
+            return f"{price:.8f}".rstrip('0').rstrip('.')
+        elif price < 0.001:
+            return f"{price:.6f}".rstrip('0').rstrip('.')
+        elif price < 0.01:
+            return f"{price:.5f}".rstrip('0').rstrip('.')
+        elif price < 0.1:
+            return f"{price:.4f}".rstrip('0').rstrip('.')
+        elif price < 1:
+            return f"{price:.3f}".rstrip('0').rstrip('.')
+        else:
+            return f"{price:.2f}".rstrip('0').rstrip('.')
+
     def __init__(self, settings: Dict = None):
         from config import FVG_SETTINGS
         self.settings = settings or FVG_SETTINGS
@@ -4236,8 +4249,8 @@ class SMCFvgAnalyzer:
                     'size': gap_size,
                     'strength': min(100, gap_size * 20),
                     'confirmed': mode == 'advanced',
-                    'tf': tf_name,
-                    'description': f"📈 FVG ({tf_name}) бычий: {candle1['high']:.9f}-{candle3['low']:.9f} ({gap_size:.2f}%)"
+                    'tf': tf_name,                    
+                    'description': f"📈 FVG ({tf_name}) бычий: {self.format_price(candle1['high'])}-{self.format_price(candle3['low'])} ({gap_size:.2f}%)"
                 }
                 result['zones'].append(zone)
                 result['has_fvg'] = True
@@ -4260,7 +4273,7 @@ class SMCFvgAnalyzer:
                     'strength': min(100, gap_size * 20),
                     'confirmed': mode == 'advanced',
                     'tf': tf_name,
-                    'description': f"📉 FVG ({tf_name}) медвежий: {candle3['high']:.9f}-{candle1['low']:.9f} ({gap_size:.2f}%)"
+                    'description': f"📉 FVG ({tf_name}) медвежий: {self.format_price(candle3['high'])}-{self.format_price(candle1['low'])} ({gap_size:.2f}%)"
                 }
                 result['zones'].append(zone)
                 result['has_fvg'] = True
@@ -7758,7 +7771,7 @@ class FastPumpScanner:
             price_formatted = f"{signal['price']:.2f}"
         
         price_formatted = price_formatted.rstrip('0').rstrip('.') if '.' in price_formatted else price_formatted
-        line7 = f"💰 Цена текущая: {price_formatted}"
+        line7 = f"💰 Цена текущая: <code>{price_formatted}</code>"
 
         line8 = ""
         if pump_data:
@@ -7770,9 +7783,9 @@ class FastPumpScanner:
             
             # ✅ ПРАВИЛЬНО: проверяем направление движения
             if pump_change > 0:
-                line8 = f"📈 Рост: {start_formatted} → {price_formatted} за {pump_time:.0f}с"
+                line8 = f"📈 Рост: <code>{start_formatted}</code> → <code>{price_formatted}</code> за {pump_time:.0f}с"
             else:
-                line8 = f"📉 Падение: {start_formatted} → {price_formatted} за {pump_time:.0f}с"
+                line8 = f"📉 Падение: <code>{start_formatted}</code> → <code>{price_formatted}</code> за {pump_time:.0f}с"
         
         # Собираем строки сообщения
         lines = [line1, line2, line3, line4, line5, line6, line7]
@@ -7786,7 +7799,7 @@ class FastPumpScanner:
         if entry_zones:
             lines.append("🟣 Зоны доп.входа:")
             for zone in entry_zones:
-                lines.append(f"     ▪️ {zone}")
+                lines.append(f"     ▪️ <code>{zone}</code>")
 
         # Форматирование целей
         if signal.get('target_1') and signal.get('target_2') and signal.get('stop_loss'):
@@ -7835,7 +7848,7 @@ class FastPumpScanner:
             t1 = format_target(signal['target_1'])
             t2 = format_target(signal['target_2'])
             sl = format_target(signal['stop_loss'])
-            line9 = f"🎯 Цели: {t1} | {t2} | SL {sl}"
+            line9 = f"🎯 Цели: <code>{t1}</code> | <code>{t2}</code> | SL <code>{sl}</code>"
         else:
             line9 = "🎯 Цели: N/A | N/A | SL N/A"
         
@@ -8224,7 +8237,7 @@ class MultiExchangeScannerBot:
         if entry_zones:
             lines.append("🟣 Зоны доп.входа:")
             for zone in entry_zones:
-                lines.append(f"     ▪️ {zone}")
+                lines.append(f"     ▪️ <code>{zone}</code>")
         
         # Потенциал для накопления
         potential_line = ""
