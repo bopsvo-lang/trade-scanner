@@ -2825,11 +2825,13 @@ class SmartMoneyAnalyzer:
         
         return result
 
-    def find_equal_highs_lows(self, df: pd.DataFrame, tf_name: str) -> Dict:
+    def find_equal_highs_lows(self, df: pd.DataFrame, tf_name: str, current_price: float, signal_type: str = 'regular') -> Dict:
         """
         Поиск равных максимумов (EQH) и равных минимумов (EQL)
         Это уровни, где толпа держит стоп-лоссы
         """
+        from config import EQUAL_HIGH_LOW_SETTINGS
+        
         result = {
             'has_equal': False,
             'type': None,
@@ -2838,8 +2840,19 @@ class SmartMoneyAnalyzer:
             'description': ''
         }
         
-        threshold_pct = 0.1  # 0.1% допуск (как в индикаторе)
-        confirmation_bars = 3  # бар для подтверждения
+        if not EQUAL_HIGH_LOW_SETTINGS.get('enabled', True):
+            return result
+        
+        threshold_pct = EQUAL_HIGH_LOW_SETTINGS.get('threshold_pct', 0.1)
+        confirmation_bars = EQUAL_HIGH_LOW_SETTINGS.get('confirmation_bars', 3)
+        
+        # Выбираем макс расстояние в зависимости от типа сигнала
+        if signal_type in ['PUMP', 'DUMP', 'pump']:
+            max_distance = EQUAL_HIGH_LOW_SETTINGS.get('max_distance_pct', 5.0)
+        elif signal_type == 'accumulation':
+            max_distance = EQUAL_HIGH_LOW_SETTINGS.get('max_distance_accumulation_pct', 25.0)
+        else:
+            max_distance = EQUAL_HIGH_LOW_SETTINGS.get('max_distance_regular_pct', 15.0)
         
         # Поиск равных максимумов (EQH)
         highs = df['high'].values
@@ -2859,25 +2872,38 @@ class SmartMoneyAnalyzer:
                         result['price'] = current_high
                         result['strength'] = 70
                         result['description'] = f"📐 EQH (Equal High) на {tf_name}: {current_high:.4f} — уровень ликвидности"
-                        return result
+                        break
+            if result['has_equal']:
+                break
         
         # Поиск равных минимумов (EQL)
-        lows = df['low'].values
-        for i in range(confirmation_bars, len(lows) - confirmation_bars):
-            current_low = lows[i]
-            
-            for j in range(i - confirmation_bars, max(0, i - 50), -1):
-                prev_low = lows[j]
-                diff_pct = abs(current_low - prev_low) / prev_low * 100
+        if not result['has_equal']:
+            lows = df['low'].values
+            for i in range(confirmation_bars, len(lows) - confirmation_bars):
+                current_low = lows[i]
                 
-                if diff_pct <= threshold_pct:
-                    if all(l > current_low for l in lows[i+1:i+confirmation_bars+1]):
-                        result['has_equal'] = True
-                        result['type'] = 'EQL'
-                        result['price'] = current_low
-                        result['strength'] = 70
-                        result['description'] = f"📐 EQL (Equal Low) на {tf_name}: {current_low:.4f} — уровень ликвидности"
-                        return result
+                for j in range(i - confirmation_bars, max(0, i - 50), -1):
+                    prev_low = lows[j]
+                    diff_pct = abs(current_low - prev_low) / prev_low * 100
+                    
+                    if diff_pct <= threshold_pct:
+                        if all(l > current_low for l in lows[i+1:i+confirmation_bars+1]):
+                            result['has_equal'] = True
+                            result['type'] = 'EQL'
+                            result['price'] = current_low
+                            result['strength'] = 70
+                            result['description'] = f"📐 EQL (Equal Low) на {tf_name}: {current_low:.4f} — уровень ликвидности"
+                            break
+                if result['has_equal']:
+                    break
+        
+        # Проверяем расстояние до цены (только если нашли)
+        if result['has_equal']:
+            distance_pct = abs(result['price'] - current_price) / current_price * 100
+            if distance_pct > max_distance:
+                return {'has_equal': False, 'type': None, 'price': 0, 'strength': 0, 'description': ''}
+            result['distance'] = distance_pct
+            result['description'] += f" ({distance_pct:.1f}% от цены)"
         
         return result
 
