@@ -7719,7 +7719,9 @@ class FastPumpScanner:
                     signal['signal_type'] = 'DUMP'
                     logger.info(f"  📊 format_pump_message: СМЕНА! {old_dir} → {signal['direction']} (DUMP, bearish_score={bearish_score})")
                     if 'reasons' in signal and not any('Отскок' in r for r in signal['reasons']):
-                        signal['reasons'].insert(0, f"Продолжение дампа {pump_change:.1f}%")
+                        reason_text = f"Продолжение дампа {pump_change:.1f}%"
+                        if reason_text not in signal['reasons']:
+                            signal['reasons'].insert(0, reason_text)
                 else:
                     old_dir = signal['direction']
                     signal_emoji = "📊" if pump_change < -1.5 else "📉"
